@@ -1,0 +1,10 @@
+# Ensure consistent LF line endings across all platforms.
+# gofmt always writes LF; checking out with CRLF causes spurious gofmt diffs on Windows.
+* text=auto
+*.go text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
