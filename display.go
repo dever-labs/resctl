@@ -157,22 +157,31 @@ func ListModes() ([]Resolution, error) {
 
 // SetResolution changes the primary display resolution.
 // When freq is 0, the current refresh rate is preserved if available at the
-// new dimensions; otherwise the highest supported rate is used.
+// new dimensions; otherwise the highest supported rate is used. If the
+// resolution does not appear in the enumerated mode list (e.g. a virtual
+// resolution injected by Sunshine), the frequency field is omitted entirely
+// so Windows picks the best available rate rather than rejecting the call.
 func SetResolution(width, height, freq uint32) (Resolution, error) {
-	if freq == 0 {
-		resolved, err := pickFreq(width, height)
-		if err != nil {
-			return Resolution{}, err
+	specifyFreq := freq != 0
+	if !specifyFreq {
+		if resolved, err := pickFreq(width, height); err == nil {
+			freq = resolved
+			specifyFreq = true
 		}
-		freq = resolved
+		// If pickFreq fails the resolution is not in the enumerated mode list
+		// (e.g. a virtual/injected resolution). Proceed without DM_DISPLAYFREQUENCY
+		// and let Windows choose the refresh rate.
 	}
 
 	var dm DEVMODE
 	dm.DmSize = uint16(unsafe.Sizeof(dm))
-	dm.DmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY
+	dm.DmFields = DM_PELSWIDTH | DM_PELSHEIGHT
 	dm.DmPelsWidth = width
 	dm.DmPelsHeight = height
-	dm.DmDisplayFrequency = freq
+	if specifyFreq {
+		dm.DmFields |= DM_DISPLAYFREQUENCY
+		dm.DmDisplayFrequency = freq
+	}
 
 	ret, _, _ := procChangeDisplaySettingsW.Call(
 		uintptr(unsafe.Pointer(&dm)),
@@ -181,12 +190,26 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 
 	switch int32(ret) {
 	case DISP_CHANGE_SUCCESSFUL:
+		if !specifyFreq {
+			// Discover the actual refresh rate Windows applied.
+			if cur, err := GetCurrent(); err == nil {
+				return cur, nil
+			}
+		}
 		return Resolution{Width: width, Height: height, Freq: freq}, nil
 	case DISP_CHANGE_RESTART:
-		return Resolution{Width: width, Height: height, Freq: freq},
-			fmt.Errorf("resolution changed but a restart is required")
+		res := Resolution{Width: width, Height: height, Freq: freq}
+		if !specifyFreq {
+			if cur, err := GetCurrent(); err == nil {
+				res = cur
+			}
+		}
+		return res, fmt.Errorf("resolution changed but a restart is required")
 	case DISP_CHANGE_BADMODE:
-		return Resolution{}, fmt.Errorf("resolution %dx%d@%dHz is not supported", width, height, freq)
+		if specifyFreq {
+			return Resolution{}, fmt.Errorf("resolution %dx%d@%dHz is not supported", width, height, freq)
+		}
+		return Resolution{}, fmt.Errorf("resolution %dx%d is not supported", width, height)
 	default:
 		return Resolution{}, fmt.Errorf("ChangeDisplaySettingsW failed (code %d)", int32(ret))
 	}
