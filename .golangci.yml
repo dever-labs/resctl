@@ -16,9 +16,3 @@ linters:
 formatters:
   enable:
     - gofmt
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
