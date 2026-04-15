@@ -119,14 +119,14 @@ go test ./...
 
 ### Release
 
-Push a `v*` tag to trigger the release pipeline:
+Tag the commit you want to release, then create a release from the GitHub UI
+(or ask an AI to do it). Build the binary locally with a version string and
+attach it as an asset:
 
+```powershell
+$env:VERSION = "v1.0.0"
+.\build.ps1
 ```
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-The CI will run tests, build the binary with the tag embedded as the version string, and publish a GitHub Release with `resctl.exe` attached as a downloadable asset.
 
 ---
 
