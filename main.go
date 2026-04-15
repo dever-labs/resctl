@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// version is overridden at link time via -ldflags="-X main.version=vX.Y.Z".
+var version = "dev"
+
 const usage = `resctl - Windows 11 display resolution manager
 
 Usage:
@@ -18,6 +21,7 @@ Usage:
   resctl toggle [res1 res2 ...]  Toggle between resolutions
   resctl install                 Copy to ~/bin and add to PATH
   resctl uninstall               Remove from ~/bin
+  resctl version                 Print version
 
 Resolution format:  WxH  or  WxH@Hz  (e.g. 1920x1080  or  2560x1440@144)
 
@@ -54,6 +58,8 @@ func main() {
 		err = install()
 	case "uninstall":
 		err = uninstall()
+	case "version", "-v", "--version":
+		fmt.Printf("resctl %s\n", version)
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 	default:

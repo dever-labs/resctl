@@ -1,0 +1,10 @@
+# Build output
+*.exe
+resource.syso
+
+# Test cache
+*.test
+
+# Go workspace
+go.work
+go.work.sum

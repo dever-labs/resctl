@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+
+  test:
+    name: Test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Tests run before go generate so resource.syso is absent —
+      # the test linker cannot handle Windows COFF resource objects.
+      - name: Run tests
+        run: go test -v -race ./...
+
+  build:
+    name: Build
+    runs-on: windows-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install goversioninfo
+        run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+      - name: Embed version resources
+        run: goversioninfo -64 -o resource.syso
+
+      - name: Build
+        run: go build -ldflags="-s -w -X main.version=dev+${{ github.sha }}" -o resctl.exe .
+
+      - name: Smoke test
+        run: .\resctl.exe version

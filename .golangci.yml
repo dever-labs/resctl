@@ -1,0 +1,27 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - gosimple
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - misspell
+    - godot
+    - whitespace
+
+issues:
+  exclude-rules:
+    # Ignore unchecked errors in test files
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Ignore dot comments on exported functions that call OS/syscall APIs
+    - linters:
+        - godot
+      source: "^//"
+      text: "^Comment"
