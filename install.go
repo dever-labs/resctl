@@ -50,8 +50,7 @@ func install() error {
 	}
 
 	if err := addToUserPath(dir); err != nil {
-		return fmt.Errorf("installed to %s but failed to update PATH: %w\n"+
-			"Add %s to your PATH manually.", dest, err, dir)
+		return fmt.Errorf("installed to %s but failed to update PATH: %w — add %s to your PATH manually", dest, err, dir)
 	}
 
 	fmt.Printf("Installed: %s\n", dest)
@@ -102,7 +101,7 @@ func addToUserPath(dir string) error {
 
 	// Notify the shell so new terminals inherit the updated PATH.
 	env, _ := syscall.UTF16PtrFromString("Environment")
-	procSendMessageTimeoutW.Call(
+	_, _, _ = procSendMessageTimeoutW.Call(
 		hwndBroadcast,
 		wmSettingChange,
 		0,

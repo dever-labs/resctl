@@ -75,8 +75,8 @@ type DEVMODE struct {
 }
 
 var (
-	user32                    = syscall.NewLazyDLL("user32.dll")
-	procEnumDisplaySettingsW  = user32.NewProc("EnumDisplaySettingsW")
+	user32                     = syscall.NewLazyDLL("user32.dll")
+	procEnumDisplaySettingsW   = user32.NewProc("EnumDisplaySettingsW")
 	procChangeDisplaySettingsW = user32.NewProc("ChangeDisplaySettingsW")
 )
 

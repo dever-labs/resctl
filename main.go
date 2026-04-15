@@ -136,8 +136,7 @@ func cmdToggle(args []string) error {
 		var err error
 		state, err = loadState()
 		if err != nil || len(state.Resolutions) == 0 {
-			return fmt.Errorf("no toggle list configured\n" +
-				"  Set one with: resctl toggle <res1> <res2> ...")
+			return fmt.Errorf("no toggle list configured — run: resctl toggle <res1> <res2>")
 		}
 	}
 
