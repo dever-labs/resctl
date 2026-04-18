@@ -32,6 +32,7 @@ func isWayland() bool {
 
 // --- xrandr backend (X11) ---
 
+
 // xrandrQuery runs xrandr --query and returns the output.
 func xrandrQuery() (string, error) {
 	out, err := exec.Command("xrandr", "--query").Output()
@@ -132,148 +133,17 @@ func parseXrandrOutput(output string) (modes []Resolution, current Resolution, o
 	return modes, current, outputName, nil
 }
 
-// --- wlr-randr backend (Wayland) ---
-
-// wlrRandrQuery runs wlr-randr and returns the output.
-func wlrRandrQuery() (string, error) {
-	out, err := exec.Command("wlr-randr").Output()
-	if err != nil {
-		return "", fmt.Errorf("wlr-randr query failed: %w (is wlr-randr installed?)", err)
-	}
-	return string(out), nil
-}
-
-// parseWlrRandrOutput parses wlr-randr output into available modes,
-// the current resolution, and the first enabled output name.
-//
-// Example wlr-randr output:
-//
-//	HDMI-A-1 "Monitor" (0x...)
-//	  Physical size: 527x296 mm
-//	  Enabled: yes
-//	  Modes:
-//	    1920x1080 px, 60.000000 Hz (preferred, current)
-//	    1280x720 px, 60.000000 Hz
-//	  Position: 0,0
-func parseWlrRandrOutput(output string) (modes []Resolution, current Resolution, outputName string, err error) {
-	lines := strings.Split(output, "\n")
-
-	// Find the first enabled output.
-	startLine := -1
-	for i, line := range lines {
-		if line == "" || line[0] == ' ' || line[0] == '\t' {
-			continue
-		}
-		// Look ahead within this output's block for "Enabled: yes".
-		for j := i + 1; j < len(lines); j++ {
-			trimmed := strings.TrimSpace(lines[j])
-			if trimmed == "Enabled: yes" {
-				startLine = i
-				break
-			}
-			// Reached the next output header.
-			if lines[j] != "" && lines[j][0] != ' ' && lines[j][0] != '\t' {
-				break
-			}
-		}
-		if startLine != -1 {
-			break
-		}
-	}
-	if startLine == -1 {
-		return nil, Resolution{}, "", fmt.Errorf("no enabled display found in wlr-randr output")
-	}
-
-	fields := strings.Fields(lines[startLine])
-	if len(fields) == 0 {
-		return nil, Resolution{}, "", fmt.Errorf("could not parse wlr-randr output line")
-	}
-	outputName = fields[0]
-
-	// Parse mode lines within this output's block.
-	inModes := false
-	seen := make(map[string]bool)
-	for _, line := range lines[startLine+1:] {
-		if line != "" && line[0] != ' ' && line[0] != '\t' {
-			break // reached the next output header
-		}
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "Modes:" {
-			inModes = true
-			continue
-		}
-		if !inModes {
-			continue
-		}
-		// Mode lines contain " px," (e.g. "1920x1080 px, 60.000000 Hz (current)").
-		// Other indented lines like "Position:", "Transform:", etc. do not.
-		if !strings.Contains(trimmed, " px,") {
-			inModes = false
-			continue
-		}
-
-		// Parse "1920x1080 px, 60.000000 Hz ..."
-		parts := strings.Fields(trimmed)
-		if len(parts) < 4 {
-			continue
-		}
-		dims := strings.SplitN(parts[0], "x", 2)
-		if len(dims) != 2 {
-			continue
-		}
-		w, werr := strconv.ParseUint(dims[0], 10, 32)
-		h, herr := strconv.ParseUint(dims[1], 10, 32)
-		if werr != nil || herr != nil {
-			continue
-		}
-		f, ferr := strconv.ParseFloat(parts[2], 64)
-		if ferr != nil {
-			continue
-		}
-		freq := uint32(f + 0.5)
-
-		isCurrent := strings.Contains(trimmed, "current")
-
-		key := fmt.Sprintf("%dx%d@%d", w, h, freq)
-		if !seen[key] {
-			seen[key] = true
-			res := Resolution{Width: uint32(w), Height: uint32(h), Freq: freq}
-			modes = append(modes, res)
-			if isCurrent {
-				current = res
-			}
-		}
-	}
-
-	sort.Slice(modes, func(i, j int) bool {
-		a, b := modes[i], modes[j]
-		if a.Width != b.Width {
-			return a.Width < b.Width
-		}
-		if a.Height != b.Height {
-			return a.Height < b.Height
-		}
-		return a.Freq < b.Freq
-	})
-
-	return modes, current, outputName, nil
-}
-
 // --- public API ---
 
 // GetCurrent returns the primary display's current resolution.
 func GetCurrent() (Resolution, error) {
 	if isWayland() {
-		raw, err := wlrRandrQuery()
-		if err != nil {
-			return Resolution{}, err
-		}
-		_, current, _, err := parseWlrRandrOutput(raw)
+		_, current, _, err := wlrNativeQuery()
 		if err != nil {
 			return Resolution{}, err
 		}
 		if current.Width == 0 {
-			return Resolution{}, fmt.Errorf("could not determine current resolution from wlr-randr output")
+			return Resolution{}, fmt.Errorf("could not determine current resolution")
 		}
 		return current, nil
 	}
@@ -295,11 +165,7 @@ func GetCurrent() (Resolution, error) {
 // ListModes returns all available display modes for the primary monitor.
 func ListModes() ([]Resolution, error) {
 	if isWayland() {
-		raw, err := wlrRandrQuery()
-		if err != nil {
-			return nil, err
-		}
-		modes, _, _, err := parseWlrRandrOutput(raw)
+		modes, _, _, err := wlrNativeQuery()
 		return modes, err
 	}
 
@@ -320,35 +186,12 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 }
 
 func setResolutionWayland(width, height, freq uint32) (Resolution, error) {
-	raw, err := wlrRandrQuery()
-	if err != nil {
-		return Resolution{}, err
-	}
-	_, _, outputName, err := parseWlrRandrOutput(raw)
-	if err != nil {
-		return Resolution{}, err
-	}
-
 	if freq == 0 {
-		if resolved, ferr := pickFreq(width, height); ferr == nil {
+		if resolved, err := pickFreq(width, height); err == nil {
 			freq = resolved
 		}
 	}
-
-	args := []string{"--output", outputName, "--mode", fmt.Sprintf("%dx%d", width, height)}
-	if freq != 0 {
-		args = append(args, "--rate", strconv.FormatUint(uint64(freq), 10))
-	}
-
-	if out, rerr := exec.Command("wlr-randr", args...).CombinedOutput(); rerr != nil {
-		return Resolution{}, fmt.Errorf("wlr-randr failed: %s", strings.TrimSpace(string(out)))
-	}
-
-	cur, err := GetCurrent()
-	if err != nil {
-		return Resolution{Width: width, Height: height, Freq: freq}, nil
-	}
-	return cur, nil
+	return wlrNativeSet(width, height, freq)
 }
 
 func setResolutionX11(width, height, freq uint32) (Resolution, error) {
@@ -413,3 +256,4 @@ func pickFreq(width, height uint32) (uint32, error) {
 	}
 	return best, nil
 }
+
