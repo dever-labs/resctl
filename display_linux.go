@@ -255,4 +255,3 @@ func pickFreq(width, height uint32) (uint32, error) {
 	}
 	return best, nil
 }
-
