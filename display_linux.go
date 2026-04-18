@@ -32,7 +32,6 @@ func isWayland() bool {
 
 // --- xrandr backend (X11) ---
 
-
 // xrandrQuery runs xrandr --query and returns the output.
 func xrandrQuery() (string, error) {
 	out, err := exec.Command("xrandr", "--query").Output()

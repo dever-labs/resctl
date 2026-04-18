@@ -79,7 +79,7 @@ func wlrDial() (*wlrClient, error) {
 	}, nil
 }
 
-func (c *wlrClient) close() { c.conn.Close() }
+func (c *wlrClient) close() { _ = c.conn.Close() }
 
 func (c *wlrClient) allocID() uint32 {
 	id := c.nextID
@@ -188,20 +188,20 @@ func (c *wlrClient) runUntil(cond func() bool) error {
 // --- event dispatch ---
 
 func (c *wlrClient) dispatch(objectID, opcode uint32, data []byte) error {
-	switch {
-	case objectID == 1: // wl_display
+	switch objectID {
+	case 1: // wl_display
 		return c.onDisplayEvent(opcode, data)
-	case objectID == 2: // wl_registry
+	case 2: // wl_registry
 		if opcode == 0 { // global
 			return c.onRegistryGlobal(data)
 		}
-	case objectID == c.syncCallbackID:
+	case c.syncCallbackID:
 		if opcode == 0 { // wl_callback.done
 			c.syncCallbackDone = true
 		}
-	case objectID == c.managerID:
+	case c.managerID:
 		c.onManagerEvent(opcode, data)
-	case objectID == c.configResultID:
+	case c.configResultID:
 		c.onConfigEvent(opcode)
 	default:
 		if head, ok := c.heads[objectID]; ok {
