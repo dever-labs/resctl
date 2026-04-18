@@ -1,5 +1,3 @@
-//go:build windows
-
 package main
 
 import (
@@ -12,7 +10,7 @@ import (
 // version is overridden at link time via -ldflags="-X main.version=vX.Y.Z".
 var version = "dev"
 
-const usage = `resctl - Windows 11 display resolution manager
+const usage = `resctl - display resolution manager
 
 Usage:
   resctl list                    List available resolutions

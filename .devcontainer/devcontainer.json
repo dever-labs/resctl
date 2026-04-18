@@ -1,0 +1,20 @@
+{
+  "name": "resctl",
+  "image": "mcr.microsoft.com/devcontainers/go:1.22-bookworm",
+
+  "postCreateCommand": "go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ],
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.lintTool": "golangci-lint",
+        "go.lintOnSave": "package"
+      }
+    }
+  }
+}

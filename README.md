@@ -5,13 +5,21 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/dever-labs/resctl)](go.mod)
 [![License](https://img.shields.io/github/license/dever-labs/resctl)](LICENSE)
 
-A minimal, single-binary CLI for changing display resolution on Windows 11. No dependencies, no installer — just drop the `.exe` in your PATH and go.
+A minimal, single-binary CLI for changing display resolution. No dependencies, no installer — just drop the binary in your PATH and go.
+
+| Platform | Support |
+|---|---|
+| Windows 7 / 8 / 10 / 11 | ✅ via Win32 API |
+| Linux (X11) | ✅ via xrandr |
+| Linux (Wayland) | ❌ not supported |
 
 ---
 
 ## Installation
 
-### Option 1 — Download a release (recommended)
+### Windows
+
+#### Option 1 — Download a release (recommended)
 
 1. Grab `resctl.exe` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
 2. Open a terminal **in the folder containing the download** and run:
@@ -24,13 +32,40 @@ A minimal, single-binary CLI for changing display resolution on Windows 11. No d
 
 3. Restart your terminal — you're done.
 
-### Option 2 — Build from source
+#### Option 2 — Build from source
 
 ```powershell
 git clone https://github.com/dever-labs/resctl
 cd resctl
 .\build.ps1          # installs goversioninfo, embeds resources, builds resctl.exe
 .\resctl.exe install
+```
+
+### Linux (X11)
+
+> **Requires** `xrandr` (`x11-xserver-utils` on Debian/Ubuntu, `xorg-xrandr` on Arch).
+
+#### Option 1 — Download a release (recommended)
+
+1. Grab `resctl` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
+2. Run:
+
+   ```sh
+   chmod +x resctl
+   ./resctl install
+   ```
+
+   This copies the binary to `~/bin/resctl` and adds `~/bin` to your `PATH` in `.bashrc`, `.zshrc`, or `.profile`.
+
+3. Restart your terminal — you're done.
+
+#### Option 2 — Build from source
+
+```sh
+git clone https://github.com/dever-labs/resctl
+cd resctl
+go build -ldflags="-s -w" -o resctl .
+./resctl install
 ```
 
 ### Uninstall
@@ -57,7 +92,7 @@ resctl version                 Print the installed version
 
 ### Examples
 
-```powershell
+```sh
 # See everything your monitor supports
 resctl list
 
@@ -77,35 +112,51 @@ resctl toggle 1920x1080 2560x1440
 resctl toggle
 ```
 
-The toggle list is saved to `%APPDATA%\resctl\state.json` and persists across reboots.
+**Toggle state** is saved and persists across reboots:
+- Windows: `%APPDATA%\resctl\state.json`
+- Linux: `$XDG_CONFIG_HOME/resctl/state.json` (defaults to `~/.config/resctl/state.json`)
 
 ---
 
 ## How it works
 
-resctl calls the Win32 `EnumDisplaySettingsW` and `ChangeDisplaySettingsW` APIs directly — no third-party dependencies, no admin rights required for the primary display.
+- **Windows** — calls `EnumDisplaySettingsW` and `ChangeDisplaySettingsW` directly. No admin rights required for the primary display.
+- **Linux** — shells out to `xrandr`. Targets the primary connected output. Requires an X11 session.
 
 ---
 
 ## Development
 
-### Requirements
+The easiest way to get started is with the included **Dev Container** — open the repo in VS Code or GitHub Codespaces and everything is set up automatically.
 
-- Go 1.21+
-- Windows (the tool uses Windows-only APIs)
+### Requirements (without Dev Container)
+
+- Go 1.20+
+- **Windows build:** `goversioninfo` (`go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`)
+- **Linux build:** `xrandr` for smoke-testing
 
 ### Build
 
+**Windows:**
 ```powershell
 .\build.ps1
 ```
 
 Or manually:
-
 ```powershell
 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
 goversioninfo -64 -o resource.syso   # embed icon & version metadata
 go build -ldflags="-s -w -X main.version=dev" -o resctl.exe .
+```
+
+**Linux:**
+```sh
+go build -ldflags="-s -w -X main.version=dev" -o resctl .
+```
+
+**Cross-compile for Windows from Linux (Dev Container):**
+```sh
+GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version=dev" -o resctl.exe .
 ```
 
 ### Test
@@ -113,15 +164,19 @@ go build -ldflags="-s -w -X main.version=dev" -o resctl.exe .
 Tests run *without* `resource.syso` present (the test linker cannot handle Windows COFF resource objects):
 
 ```powershell
+# Windows
 Remove-Item resource.syso -ErrorAction SilentlyContinue
+go test ./...
+```
+
+```sh
+# Linux / Dev Container
 go test ./...
 ```
 
 ### Release
 
-Tag the commit you want to release, then create a release from the GitHub UI
-(or ask an AI to do it). Build the binary locally with a version string and
-attach it as an asset:
+Tag the commit you want to release, then create a release from the GitHub UI and attach the built binary as an asset:
 
 ```powershell
 $env:VERSION = "v1.0.0"
