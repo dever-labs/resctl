@@ -87,9 +87,11 @@ func addToShellPath(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	_, err = fmt.Fprintf(f, "\n# Added by resctl install\nexport PATH=\"$PATH:%s\"\n", dir)
+	if closeErr := f.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
 	return err
 }
 
