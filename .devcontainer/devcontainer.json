@@ -1,8 +1,16 @@
 {
   "name": "resctl",
-  "image": "mcr.microsoft.com/devcontainers/go:1.22-bookworm",
+  "image": "ghcr.io/dever-labs/devcontainers/go-dev:latest",
 
   "postCreateCommand": "go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin",
+
+  "mounts": [
+    "source=dever-labs-gh-config,target=/home/vscode/.config/gh,type=volume"
+  ],
+
+  "remoteEnv": {
+    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
+  },
 
   "customizations": {
     "vscode": {
