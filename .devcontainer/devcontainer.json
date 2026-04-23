@@ -5,7 +5,8 @@
   "postCreateCommand": "go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin",
 
   "mounts": [
-    "source=dever-labs-gh-config,target=/home/vscode/.config/gh,type=volume"
+    "source=dever-labs-gh-config,target=/home/vscode/.config/gh,type=volume",
+    "source=dever-labs-copilot-config,target=/home/vscode/.copilot,type=volume"
   ],
 
   "remoteEnv": {
@@ -15,6 +16,9 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        "github.copilot",
+        "github.copilot-chat",
+        "anthropics.claude-code",
         "golang.go"
       ],
       "settings": {
