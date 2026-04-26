@@ -11,7 +11,7 @@ A minimal, single-binary CLI for changing display resolution. No dependencies, n
 |---|---|
 | Windows 7 / 8 / 10 / 11 | ✅ via Win32 API |
 | Linux (X11) | ✅ via xrandr |
-| Linux (Wayland) | ❌ not supported |
+| Linux (Wayland) | ✅ via zwlr-output-management protocol |
 
 ---
 
@@ -41,9 +41,10 @@ cd resctl
 .\resctl.exe install
 ```
 
-### Linux (X11)
+### Linux
 
-> **Requires** `xrandr` (`x11-xserver-utils` on Debian/Ubuntu, `xorg-xrandr` on Arch).
+> **X11 requires** `xrandr` (`x11-xserver-utils` on Debian/Ubuntu, `xorg-xrandr` on Arch).  
+> **Wayland** works out of the box — the binary speaks the `zwlr-output-management-unstable-v1` protocol directly. No extra packages needed. Requires a compositor that implements that protocol (e.g. sway, wayfire, labwc, or any wlroots-based compositor).
 
 #### Option 1 — Download a release (recommended)
 
@@ -121,7 +122,8 @@ resctl toggle
 ## How it works
 
 - **Windows** — calls `EnumDisplaySettingsW` and `ChangeDisplaySettingsW` directly. No admin rights required for the primary display.
-- **Linux** — shells out to `xrandr`. Targets the primary connected output. Requires an X11 session.
+- **Linux (X11)** — shells out to `xrandr`. Targets the primary connected output. Requires an X11 session.
+- **Linux (Wayland)** — connects to the Wayland compositor socket and speaks the `zwlr-output-management-unstable-v1` protocol natively. No external tools required. The session is detected automatically via `WAYLAND_DISPLAY` or `XDG_SESSION_TYPE`.
 
 ---
 
