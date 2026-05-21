@@ -104,4 +104,3 @@ DP-1 connected primary 2560x1440+0+0 (normal left inverted right x axis y axis) 
 		t.Errorf("modes = %v, want [{60} {144}]", modes)
 	}
 }
-
