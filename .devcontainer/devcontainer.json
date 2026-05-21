@@ -1,12 +1,14 @@
 {
   "name": "resctl",
-  "image": "ghcr.io/dever-labs/devcontainers/go-dev:latest",
+  "image": "ghcr.io/dever-labs/devcontainers/go-dev:v1.5.0",
 
-  "postCreateCommand": "go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin",
+  "postCreateCommand": "npm install -g @github/copilot @anthropic-ai/claude-code && sudo ln -sf $(npm prefix -g)/bin/copilot /usr/local/bin/copilot && sudo ln -sf $(npm prefix -g)/bin/claude /usr/local/bin/claude && go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin",
+
+  "postStartCommand": "k3d-cluster-init",
 
   "mounts": [
     "source=dever-labs-gh-config,target=/home/vscode/.config/gh,type=volume",
-    "source=dever-labs-copilot-config,target=/home/vscode/.copilot,type=volume"
+    "source=dever-labs-copilot,target=/home/vscode/.copilot,type=volume"
   ],
 
   "remoteEnv": {

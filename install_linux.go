@@ -63,7 +63,8 @@ func uninstall() error {
 	return nil
 }
 
-// addToShellPath appends ~/bin to PATH in the user's shell rc file.
+// addToShellPath appends dir to PATH in the user's shell rc file.
+// Fish shell uses a different config location and PATH syntax.
 func addToShellPath(dir string) error {
 	rcFile := shellRCFile()
 	if rcFile == "" {
@@ -75,8 +76,23 @@ func addToShellPath(dir string) error {
 		return err
 	}
 
-	if strings.Contains(string(data), dir) {
-		return nil // already present
+	isFish := strings.HasSuffix(os.Getenv("SHELL"), "fish")
+
+	// Check if dir is already present to avoid duplicates.
+	content := string(data)
+	if isFish {
+		// fish_add_path is idempotent but we avoid adding it twice anyway.
+		if strings.Contains(content, "fish_add_path") && strings.Contains(content, dir) {
+			return nil
+		}
+	} else {
+		// Match the exact path as it would appear in the export line to avoid
+		// false positives (e.g. ~/bin matching ~/binaries).
+		if strings.Contains(content, "PATH:"+dir+"\"") ||
+			strings.Contains(content, "PATH:"+dir+":") ||
+			strings.Contains(content, "PATH:"+dir+"\n") {
+			return nil // already present
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(rcFile), 0o755); err != nil {
@@ -88,11 +104,16 @@ func addToShellPath(dir string) error {
 		return err
 	}
 
-	_, err = fmt.Fprintf(f, "\n# Added by resctl install\nexport PATH=\"$PATH:%s\"\n", dir)
-	if closeErr := f.Close(); closeErr != nil && err == nil {
-		err = closeErr
+	var writeErr error
+	if isFish {
+		_, writeErr = fmt.Fprintf(f, "\n# Added by resctl install\nfish_add_path %s\n", dir)
+	} else {
+		_, writeErr = fmt.Fprintf(f, "\n# Added by resctl install\nexport PATH=\"$PATH:%s\"\n", dir)
 	}
-	return err
+	if closeErr := f.Close(); closeErr != nil && writeErr == nil {
+		writeErr = closeErr
+	}
+	return writeErr
 }
 
 // shellRCFile returns the rc file for the current shell.
@@ -106,6 +127,8 @@ func shellRCFile() string {
 		return filepath.Join(home, ".zshrc")
 	case strings.HasSuffix(shell, "bash"):
 		return filepath.Join(home, ".bashrc")
+	case strings.HasSuffix(shell, "fish"):
+		return filepath.Join(home, ".config", "fish", "config.fish")
 	default:
 		return filepath.Join(home, ".profile")
 	}

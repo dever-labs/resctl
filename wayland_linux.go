@@ -16,6 +16,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 )
 
 // --- internal data types ---
@@ -36,6 +38,10 @@ type wlrHeadInfo struct {
 	modes       []*wlrModeInfo
 	currentMode uint32 // ID of the active zwlr_output_mode_v1
 	finished    bool
+	posX        int32
+	posY        int32
+	transform   uint32
+	scale       int32 // wl_fixed 24.8; 0 means not yet received (defaults to 256 = 1.0)
 }
 
 type wlrClient struct {
@@ -54,6 +60,23 @@ type wlrClient struct {
 
 	configResultID uint32
 	configResult   int // 0=pending, 1=succeeded, 2=failed/cancelled
+}
+
+// compositorHint returns a human-readable explanation and suggested alternative
+// when zwlr_output_manager_v1 is unavailable, based on the desktop environment.
+func compositorHint() string {
+	desktop := strings.ToLower(os.Getenv("XDG_CURRENT_DESKTOP"))
+	if desktop == "" {
+		desktop = strings.ToLower(os.Getenv("DESKTOP_SESSION"))
+	}
+	switch {
+	case strings.Contains(desktop, "gnome"):
+		return "GNOME does not support wlr-output-management; use 'gnome-randr' or Settings → Displays"
+	case strings.Contains(desktop, "kde") || strings.Contains(desktop, "plasma"):
+		return "KDE Plasma does not support wlr-output-management; use 'kscreen-doctor' or System Settings → Display"
+	default:
+		return "compositor does not support wlr-output-management (requires a wlroots-based compositor such as Sway or Hyprland)"
+	}
 }
 
 // --- connection ---
@@ -171,11 +194,23 @@ func (c *wlrClient) roundTrip() error {
 	return c.runUntil(func() bool { return c.syncCallbackDone })
 }
 
+// waylandTimeout is the maximum time to wait for a compositor response.
+const waylandTimeout = 10 * time.Second
+
 // runUntil dispatches messages from the socket until cond() returns true.
+// A deadline is applied so the call never blocks indefinitely if the compositor
+// stops responding.
 func (c *wlrClient) runUntil(cond func() bool) error {
+	if err := c.conn.SetDeadline(time.Now().Add(waylandTimeout)); err != nil {
+		return fmt.Errorf("wayland: could not set socket deadline: %w", err)
+	}
+	defer func() { _ = c.conn.SetDeadline(time.Time{}) }()
 	for !cond() {
 		objectID, opcode, data, err := c.readMsg()
 		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				return fmt.Errorf("wayland: timed out waiting for compositor response")
+			}
 			return fmt.Errorf("wayland read: %w", err)
 		}
 		if err := c.dispatch(objectID, opcode, data); err != nil {
@@ -299,6 +334,19 @@ func (c *wlrClient) onHeadEvent(head *wlrHeadInfo, opcode uint32, data []byte) {
 		if len(data) >= 4 {
 			head.currentMode = binary.LittleEndian.Uint32(data[0:4])
 		}
+	case 6: // position(x int32, y int32)
+		if len(data) >= 8 {
+			head.posX = int32(binary.LittleEndian.Uint32(data[0:4]))
+			head.posY = int32(binary.LittleEndian.Uint32(data[4:8]))
+		}
+	case 7: // transform(uint32)
+		if len(data) >= 4 {
+			head.transform = binary.LittleEndian.Uint32(data[0:4])
+		}
+	case 8: // scale(wl_fixed 24.8)
+		if len(data) >= 4 {
+			head.scale = int32(binary.LittleEndian.Uint32(data[0:4]))
+		}
 	case 9: // finished
 		head.finished = true
 	}
@@ -362,6 +410,31 @@ func (c *wlrClient) sendSetMode(configHeadID, modeID uint32) error {
 	return c.send(configHeadID, 0, args)
 }
 
+// sendSetPosition sends zwlr_output_configuration_head_v1.set_position (opcode 2).
+// args: x(int32) + y(int32)
+func (c *wlrClient) sendSetPosition(configHeadID uint32, x, y int32) error {
+	args := make([]byte, 8)
+	binary.LittleEndian.PutUint32(args[0:4], uint32(x))
+	binary.LittleEndian.PutUint32(args[4:8], uint32(y))
+	return c.send(configHeadID, 2, args)
+}
+
+// sendSetTransform sends zwlr_output_configuration_head_v1.set_transform (opcode 3).
+// args: transform(uint32)
+func (c *wlrClient) sendSetTransform(configHeadID, transform uint32) error {
+	args := make([]byte, 4)
+	binary.LittleEndian.PutUint32(args[0:4], transform)
+	return c.send(configHeadID, 3, args)
+}
+
+// sendSetScale sends zwlr_output_configuration_head_v1.set_scale (opcode 4).
+// scale is a wl_fixed 24.8 value (e.g. 256 = 1.0, 512 = 2.0).
+func (c *wlrClient) sendSetScale(configHeadID uint32, scale int32) error {
+	args := make([]byte, 4)
+	binary.LittleEndian.PutUint32(args[0:4], uint32(scale))
+	return c.send(configHeadID, 4, args)
+}
+
 // sendApply sends zwlr_output_configuration_v1.apply (opcode 2).
 func (c *wlrClient) sendApply(configID uint32) error {
 	return c.send(configID, 2, nil)
@@ -377,6 +450,30 @@ func (c *wlrClient) firstEnabledHead() *wlrHeadInfo {
 		}
 	}
 	return nil
+}
+
+// pickFreqFromHead selects the best refresh rate for width×height from the
+// head's already-enumerated modes. Prefers the current rate; falls back to
+// the highest available. Returns 0 if no matching mode is found.
+func (c *wlrClient) pickFreqFromHead(head *wlrHeadInfo, width, height uint32) uint32 {
+	var currentFreq uint32
+	if cm, ok := c.modes[head.currentMode]; ok && !cm.finished {
+		currentFreq = cm.refreshHz
+	}
+
+	var best uint32
+	for _, m := range head.modes {
+		if m.finished || uint32(m.width) != width || uint32(m.height) != height {
+			continue
+		}
+		if m.refreshHz == currentFreq {
+			return currentFreq
+		}
+		if m.refreshHz > best {
+			best = m.refreshHz
+		}
+	}
+	return best
 }
 
 func (c *wlrClient) findMode(head *wlrHeadInfo, width, height, freq uint32) *wlrModeInfo {
@@ -418,7 +515,7 @@ func wlrNativeQuery() (modes []Resolution, current Resolution, outputName string
 	}
 	if c.managerID == 0 {
 		return nil, Resolution{}, "",
-			fmt.Errorf("zwlr_output_manager_v1 not available — compositor does not support wlr-output-management")
+			fmt.Errorf("zwlr_output_manager_v1 not available — %s", compositorHint())
 	}
 	// Second roundtrip: receive all head/mode/done events from the manager.
 	if err = c.roundTrip(); err != nil {
@@ -475,7 +572,7 @@ func wlrNativeSet(width, height, freq uint32) (Resolution, error) {
 		return Resolution{}, err
 	}
 	if c.managerID == 0 {
-		return Resolution{}, fmt.Errorf("zwlr_output_manager_v1 not available")
+		return Resolution{}, fmt.Errorf("zwlr_output_manager_v1 not available — %s", compositorHint())
 	}
 	if err = c.roundTrip(); err != nil {
 		return Resolution{}, err
@@ -485,6 +582,14 @@ func wlrNativeSet(width, height, freq uint32) (Resolution, error) {
 	if head == nil {
 		return Resolution{}, fmt.Errorf("no enabled display found")
 	}
+
+	// When no frequency is specified, pick the best available rate for the
+	// requested dimensions using the modes already enumerated over this
+	// connection — avoiding a second wlrNativeQuery round-trip.
+	if freq == 0 {
+		freq = c.pickFreqFromHead(head, width, height)
+	}
+
 	target := c.findMode(head, width, height, freq)
 	if target == nil {
 		if freq != 0 {
@@ -498,13 +603,29 @@ func wlrNativeSet(width, height, freq uint32) (Resolution, error) {
 	c.configResultID = configID
 	c.configResult = 0
 
+	// Default scale to 1.0 (wl_fixed 24.8 = 256) if not received from compositor.
+	scale := head.scale
+	if scale == 0 {
+		scale = 256
+	}
+
 	if err = c.sendCreateConfiguration(configID); err != nil {
 		return Resolution{}, err
 	}
 	if err = c.sendEnableHead(configID, configHeadID, head.id); err != nil {
 		return Resolution{}, err
 	}
+	// Preserve all existing head properties; only the mode changes.
 	if err = c.sendSetMode(configHeadID, target.id); err != nil {
+		return Resolution{}, err
+	}
+	if err = c.sendSetPosition(configHeadID, head.posX, head.posY); err != nil {
+		return Resolution{}, err
+	}
+	if err = c.sendSetTransform(configHeadID, head.transform); err != nil {
+		return Resolution{}, err
+	}
+	if err = c.sendSetScale(configHeadID, scale); err != nil {
 		return Resolution{}, err
 	}
 	if err = c.sendApply(configID); err != nil {

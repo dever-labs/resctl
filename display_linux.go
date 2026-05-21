@@ -185,11 +185,6 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 }
 
 func setResolutionWayland(width, height, freq uint32) (Resolution, error) {
-	if freq == 0 {
-		if resolved, err := pickFreq(width, height); err == nil {
-			freq = resolved
-		}
-	}
 	return wlrNativeSet(width, height, freq)
 }
 
