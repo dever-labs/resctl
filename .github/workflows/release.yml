@@ -55,10 +55,30 @@ jobs:
           name: resctl-linux
           path: resctl
 
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o resctl-macos .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: resctl-macos
+          path: resctl-macos
+
   release:
     name: Publish release
     runs-on: ubuntu-latest
-    needs: [build-windows, build-linux]
+    needs: [build-windows, build-linux, build-macos]
     steps:
       - name: Download Windows binary
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -70,6 +90,11 @@ jobs:
         with:
           name: resctl-linux
 
+      - name: Download macOS binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: resctl-macos
+
       - name: Create release and attach binaries
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,4 +103,4 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
             --generate-notes \
-            resctl.exe resctl
+            resctl.exe resctl resctl-macos
