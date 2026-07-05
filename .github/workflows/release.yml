@@ -108,3 +108,4 @@ jobs:
               --generate-notes \
               resctl.exe resctl resctl-macos
           fi
+          gh release edit "${{ github.ref_name }}" --draft=false
