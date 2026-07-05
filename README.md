@@ -23,7 +23,16 @@ A minimal, single-binary CLI for changing display resolution. No dependencies, n
 #### Option 1 — Download a release (recommended)
 
 1. Grab `resctl.exe` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
-2. Open a terminal **in the folder containing the download** and run:
+2. Optionally verify the download against `checksums.txt` (also in the release assets):
+
+   ```powershell
+   # PowerShell
+   $hash = (Get-FileHash resctl.exe -Algorithm SHA256).Hash.ToLower()
+   $expected = (Select-String resctl.exe checksums.txt).Line.Split()[0]
+   if ($hash -eq $expected) { "OK" } else { "MISMATCH" }
+   ```
+
+3. Open a terminal **in the folder containing the download** and run:
 
    ```
    .\resctl.exe install
@@ -50,7 +59,14 @@ cd resctl
 #### Option 1 — Download a release (recommended)
 
 1. Grab `resctl` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
-2. Run:
+2. Optionally verify the download against `checksums.txt` (also in the release assets):
+
+   ```sh
+   sha256sum -c checksums.txt --ignore-missing
+   # resctl: OK
+   ```
+
+3. Run:
 
    ```sh
    chmod +x resctl
@@ -75,7 +91,14 @@ go build -ldflags="-s -w" -o resctl .
 #### Option 1 — Download a release (recommended)
 
 1. Grab `resctl-macos` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
-2. Run:
+2. Optionally verify the download against `checksums.txt` (also in the release assets):
+
+   ```sh
+   sha256sum -c checksums.txt --ignore-missing
+   # resctl-macos: OK
+   ```
+
+3. Run:
 
    ```sh
    mv resctl-macos resctl
