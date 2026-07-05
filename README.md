@@ -10,8 +10,9 @@ A minimal, single-binary CLI for changing display resolution. No dependencies, n
 | Platform | Support |
 |---|---|
 | Windows 7 / 8 / 10 / 11 | ✅ via Win32 API |
-| Linux (X11) | ✅ via xrandr |
-| Linux (Wayland) | ✅ via zwlr-output-management protocol |
+| Linux amd64 (X11) | ✅ via xrandr |
+| Linux amd64 (Wayland) | ✅ via zwlr-output-management protocol |
+| Linux arm64 (X11 + Wayland) | ✅ Raspberry Pi 4/5, Asahi Linux, ARM VMs |
 | macOS | ✅ via CoreGraphics |
 
 ---
@@ -58,7 +59,9 @@ cd resctl
 
 #### Option 1 — Download a release (recommended)
 
-1. Grab `resctl` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
+1. Grab the binary for your architecture from the [latest release](https://github.com/dever-labs/resctl/releases/latest):
+   - `resctl` — amd64 (most desktops/laptops)
+   - `resctl-linux-arm64` — arm64 (Raspberry Pi 4/5, Asahi Linux, ARM cloud VMs)
 2. Optionally verify the download against `checksums.txt` (also in the release assets):
 
    ```sh
