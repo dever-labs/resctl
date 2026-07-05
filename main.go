@@ -26,12 +26,17 @@ Resolution format:  WxH  or  WxH@Hz  (e.g. 1920x1080  or  2560x1440@144)
 
 Flags:
   --json              Output as JSON (supported by list and get)
-  --display <name>    Target a specific display
+  --display <name>    Target a specific display by name.
+                      Linux: output name (e.g. DP-1, HDMI-1)
+                      Windows: device name (e.g. \\.\DISPLAY1)
+                      macOS: 1-based index (e.g. 1, 2)
 
 Examples:
   resctl set 1920x1080
   resctl set 2560x1440@144
-  resctl set 2560x1440@144 --display DP-1
+  resctl set 2560x1440@144 --display DP-1       # Linux
+  resctl set 2560x1440@144 --display \\.\DISPLAY2  # Windows
+  resctl set 2560x1440@144 --display 2          # macOS
   resctl toggle 1920x1080 2560x1440    # set list + switch immediately
   resctl toggle                        # cycle to next in saved list
   resctl get --json

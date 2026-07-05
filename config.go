@@ -24,7 +24,16 @@ func configDir() string {
 }
 
 func sanitizeDisplayName(display string) string {
-	return strings.NewReplacer("/", "-", "\\", "-", " ", "-").Replace(display)
+	var b strings.Builder
+	for _, r := range display {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	return b.String()
 }
 
 func stateFile(display string) string {
