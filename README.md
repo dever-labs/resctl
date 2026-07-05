@@ -10,8 +10,9 @@ A minimal, single-binary CLI for changing display resolution. No dependencies, n
 | Platform | Support |
 |---|---|
 | Windows 7 / 8 / 10 / 11 | ✅ via Win32 API |
-| Linux (X11) | ✅ via xrandr |
-| Linux (Wayland) | ✅ via zwlr-output-management protocol |
+| Linux x86-64 (X11) | ✅ via xrandr |
+| Linux x86-64 (Wayland) | ✅ via zwlr-output-management protocol |
+| Linux arm64 (X11 + Wayland) | ✅ cross-compiled — Raspberry Pi 4/5, Asahi Linux, ARM VMs |
 | macOS | ✅ via CoreGraphics |
 
 ---
