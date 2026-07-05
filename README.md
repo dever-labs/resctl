@@ -83,7 +83,7 @@ go build -ldflags="-s -w" -o resctl .
    ./resctl install
    ```
 
-   This copies the binary to `~/bin/resctl` and adds `~/bin` to your `PATH` in `.bashrc`, `.zshrc`, `.config/fish/config.fish`, or `.profile`.
+   This copies the binary to `~/bin/resctl` and adds `~/bin` to your `PATH` in `.bash_profile`, `.zshrc`, `.config/fish/config.fish`, or `.profile`.
 
 3. Restart your terminal — you're done.
 
