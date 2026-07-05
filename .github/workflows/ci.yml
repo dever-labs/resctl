@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-2025-vs2026, ubuntu-latest]
+        os: [windows-2025-vs2026, ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-2025-vs2026, ubuntu-latest]
+        os: [windows-2025-vs2026, ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
@@ -89,3 +89,21 @@ jobs:
 
       - name: Smoke test
         run: ./resctl version
+
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build -ldflags="-s -w -X main.version=dev+${{ github.sha }}" -o resctl-macos .
+
+      - name: Smoke test
+        run: ./resctl-macos version

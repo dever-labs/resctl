@@ -12,6 +12,7 @@ A minimal, single-binary CLI for changing display resolution. No dependencies, n
 | Windows 7 / 8 / 10 / 11 | ✅ via Win32 API |
 | Linux (X11) | ✅ via xrandr |
 | Linux (Wayland) | ✅ via zwlr-output-management protocol |
+| macOS | ✅ via CoreGraphics |
 
 ---
 
@@ -57,6 +58,32 @@ cd resctl
    ```
 
    This copies the binary to `~/bin/resctl` and adds `~/bin` to your `PATH` in `.bashrc`, `.zshrc`, or `.profile`.
+
+3. Restart your terminal — you're done.
+
+#### Option 2 — Build from source
+
+```sh
+git clone https://github.com/dever-labs/resctl
+cd resctl
+go build -ldflags="-s -w" -o resctl .
+./resctl install
+```
+
+### macOS
+
+#### Option 1 — Download a release (recommended)
+
+1. Grab `resctl-macos` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
+2. Run:
+
+   ```sh
+   mv resctl-macos resctl
+   chmod +x resctl
+   ./resctl install
+   ```
+
+   This copies the binary to `~/bin/resctl` and adds `~/bin` to your `PATH` in `.bash_profile`, `.zshrc`, `.config/fish/config.fish`, or `.profile`.
 
 3. Restart your terminal — you're done.
 
@@ -116,6 +143,7 @@ resctl toggle
 **Toggle state** is saved and persists across reboots:
 - Windows: `%APPDATA%\resctl\state.json`
 - Linux: `$XDG_CONFIG_HOME/resctl/state.json` (defaults to `~/.config/resctl/state.json`)
+- macOS: `~/Library/Application Support/resctl/state.json`
 
 ---
 
@@ -124,6 +152,7 @@ resctl toggle
 - **Windows** — calls `EnumDisplaySettingsW` and `ChangeDisplaySettingsW` directly. No admin rights required for the primary display.
 - **Linux (X11)** — shells out to `xrandr`. Targets the primary connected output. Requires an X11 session.
 - **Linux (Wayland)** — connects to the Wayland compositor socket and speaks the `zwlr-output-management-unstable-v1` protocol natively. No external tools required. The session is detected automatically via `WAYLAND_DISPLAY` or `XDG_SESSION_TYPE`.
+- **macOS** — calls CoreGraphics (`CGDisplayCopyDisplayMode`, `CGDisplayCopyAllDisplayModes`, and `CGDisplaySetDisplayMode`) directly for the main display. No external tools required.
 
 ---
 
@@ -136,6 +165,7 @@ The easiest way to get started is with the included **Dev Container** — open t
 - Go 1.20+
 - **Windows build:** `goversioninfo` (`go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`)
 - **Linux build:** `xrandr` for smoke-testing
+- **macOS build:** Xcode Command Line Tools for cgo and CoreGraphics
 
 ### Build
 
@@ -152,6 +182,11 @@ go build -ldflags="-s -w -X main.version=dev" -o resctl.exe .
 ```
 
 **Linux:**
+```sh
+go build -ldflags="-s -w -X main.version=dev" -o resctl .
+```
+
+**macOS:**
 ```sh
 go build -ldflags="-s -w -X main.version=dev" -o resctl .
 ```
@@ -173,6 +208,11 @@ go test ./...
 
 ```sh
 # Linux / Dev Container
+go test ./...
+```
+
+```sh
+# macOS
 go test ./...
 ```
 

@@ -25,8 +25,7 @@ jobs:
           - language: actions
             build-mode: none
           - language: go
-            # autobuild fails: all files carry //go:build windows and the runner
-            # is Linux. Use manual mode with a cross-compile instead.
+            # Keep the platform-specific Go backends explicit for CodeQL.
             build-mode: manual
 
     steps:
