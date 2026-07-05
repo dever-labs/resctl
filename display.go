@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	CCHDEVICENAME = 32
-	CCHFORMNAME   = 32
+	CCHDEVICENAME   = 32
+	CCHDEVICESTRING = 128
+	CCHFORMNAME     = 32
 
 	CDS_UPDATEREGISTRY = 0x00000001
 
@@ -74,10 +75,21 @@ type DEVMODE struct {
 	DmPanningHeight    uint32
 }
 
+type DISPLAY_DEVICE struct {
+	Cb           uint32
+	DeviceName   [CCHDEVICENAME]uint16
+	DeviceString [CCHDEVICESTRING]uint16
+	StateFlags   uint32
+	DeviceID     [128]uint16
+	DeviceKey    [128]uint16
+}
+
 var (
-	user32                     = syscall.NewLazyDLL("user32.dll")
-	procEnumDisplaySettingsW   = user32.NewProc("EnumDisplaySettingsW")
-	procChangeDisplaySettingsW = user32.NewProc("ChangeDisplaySettingsW")
+	user32                       = syscall.NewLazyDLL("user32.dll")
+	procEnumDisplayDevicesW      = user32.NewProc("EnumDisplayDevicesW")
+	procEnumDisplaySettingsW     = user32.NewProc("EnumDisplaySettingsW")
+	procChangeDisplaySettingsW   = user32.NewProc("ChangeDisplaySettingsW")
+	procChangeDisplaySettingsExW = user32.NewProc("ChangeDisplaySettingsExW")
 )
 
 // Resolution holds a display mode.
@@ -91,17 +103,59 @@ func (r Resolution) String() string {
 	return fmt.Sprintf("%dx%d@%dHz", r.Width, r.Height, r.Freq)
 }
 
-// GetCurrent returns the primary display's current resolution.
-func GetCurrent() (Resolution, error) {
+func displayDeviceName(display string) (*uint16, error) {
+	if display == "" {
+		return nil, nil
+	}
+
+	for i := uint32(0); ; i++ {
+		var dd DISPLAY_DEVICE
+		dd.Cb = uint32(unsafe.Sizeof(dd))
+		ret, _, _ := procEnumDisplayDevicesW.Call(
+			0,
+			uintptr(i),
+			uintptr(unsafe.Pointer(&dd)),
+			0,
+		)
+		if ret == 0 {
+			break
+		}
+
+		deviceName := syscall.UTF16ToString(dd.DeviceName[:])
+		deviceString := syscall.UTF16ToString(dd.DeviceString[:])
+		if deviceName != display && deviceString != display {
+			continue
+		}
+
+		ptr, err := syscall.UTF16PtrFromString(deviceName)
+		if err != nil {
+			return nil, err
+		}
+		return ptr, nil
+	}
+
+	return nil, fmt.Errorf("display %q not found", display)
+}
+
+// GetCurrent returns the selected display's current resolution.
+func GetCurrent(display string) (Resolution, error) {
+	deviceName, err := displayDeviceName(display)
+	if err != nil {
+		return Resolution{}, err
+	}
+
 	var dm DEVMODE
 	dm.DmSize = uint16(unsafe.Sizeof(dm))
 	ret, _, _ := procEnumDisplaySettingsW.Call(
-		0,
+		uintptr(unsafe.Pointer(deviceName)),
 		uintptr(ENUM_CURRENT_SETTINGS),
 		uintptr(unsafe.Pointer(&dm)),
 	)
 	if ret == 0 {
-		return Resolution{}, fmt.Errorf("EnumDisplaySettingsW failed")
+		if display == "" {
+			return Resolution{}, fmt.Errorf("EnumDisplaySettingsW failed")
+		}
+		return Resolution{}, fmt.Errorf("EnumDisplaySettingsW failed for %q", display)
 	}
 	return Resolution{
 		Width:  dm.DmPelsWidth,
@@ -110,9 +164,14 @@ func GetCurrent() (Resolution, error) {
 	}, nil
 }
 
-// ListModes returns all unique display modes for the primary monitor
+// ListModes returns all unique display modes for the selected monitor
 // with at least 24-bit colour depth, sorted by width → height → freq.
-func ListModes() ([]Resolution, error) {
+func ListModes(display string) ([]Resolution, error) {
+	deviceName, err := displayDeviceName(display)
+	if err != nil {
+		return nil, err
+	}
+
 	seen := make(map[string]bool)
 	var modes []Resolution
 
@@ -120,7 +179,7 @@ func ListModes() ([]Resolution, error) {
 		var dm DEVMODE
 		dm.DmSize = uint16(unsafe.Sizeof(dm))
 		ret, _, _ := procEnumDisplaySettingsW.Call(
-			0,
+			uintptr(unsafe.Pointer(deviceName)),
 			uintptr(i),
 			uintptr(unsafe.Pointer(&dm)),
 		)
@@ -155,16 +214,21 @@ func ListModes() ([]Resolution, error) {
 	return modes, nil
 }
 
-// SetResolution changes the primary display resolution.
+// SetResolution changes the selected display resolution.
 // When freq is 0, the current refresh rate is preserved if available at the
 // new dimensions; otherwise the highest supported rate is used. If the
 // resolution does not appear in the enumerated mode list (e.g. a virtual
 // resolution injected by Sunshine), the frequency field is omitted entirely
 // so Windows picks the best available rate rather than rejecting the call.
-func SetResolution(width, height, freq uint32) (Resolution, error) {
+func SetResolution(width, height, freq uint32, display string) (Resolution, error) {
+	deviceName, err := displayDeviceName(display)
+	if err != nil {
+		return Resolution{}, err
+	}
+
 	specifyFreq := freq != 0
 	if !specifyFreq {
-		if resolved, err := pickFreq(width, height); err == nil {
+		if resolved, err := pickFreq(width, height, display); err == nil {
 			freq = resolved
 			specifyFreq = true
 		}
@@ -183,16 +247,27 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 		dm.DmDisplayFrequency = freq
 	}
 
-	ret, _, _ := procChangeDisplaySettingsW.Call(
-		uintptr(unsafe.Pointer(&dm)),
-		uintptr(CDS_UPDATEREGISTRY),
-	)
+	var ret uintptr
+	if deviceName == nil {
+		ret, _, _ = procChangeDisplaySettingsW.Call(
+			uintptr(unsafe.Pointer(&dm)),
+			uintptr(CDS_UPDATEREGISTRY),
+		)
+	} else {
+		ret, _, _ = procChangeDisplaySettingsExW.Call(
+			uintptr(unsafe.Pointer(deviceName)),
+			uintptr(unsafe.Pointer(&dm)),
+			0,
+			uintptr(CDS_UPDATEREGISTRY),
+			0,
+		)
+	}
 
 	switch int32(ret) {
 	case DISP_CHANGE_SUCCESSFUL:
 		if !specifyFreq {
 			// Discover the actual refresh rate Windows applied.
-			if cur, err := GetCurrent(); err == nil {
+			if cur, err := GetCurrent(display); err == nil {
 				return cur, nil
 			}
 		}
@@ -200,7 +275,7 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 	case DISP_CHANGE_RESTART:
 		res := Resolution{Width: width, Height: height, Freq: freq}
 		if !specifyFreq {
-			if cur, err := GetCurrent(); err == nil {
+			if cur, err := GetCurrent(display); err == nil {
 				res = cur
 			}
 		}
@@ -211,19 +286,23 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 		}
 		return Resolution{}, fmt.Errorf("resolution %dx%d is not supported", width, height)
 	default:
-		return Resolution{}, fmt.Errorf("ChangeDisplaySettingsW failed (code %d)", int32(ret))
+		apiName := "ChangeDisplaySettingsW"
+		if display != "" {
+			apiName = "ChangeDisplaySettingsExW"
+		}
+		return Resolution{}, fmt.Errorf("%s failed (code %d)", apiName, int32(ret))
 	}
 }
 
 // pickFreq finds the best refresh rate for width×height.
 // Prefers the current rate; falls back to the highest available.
-func pickFreq(width, height uint32) (uint32, error) {
-	modes, err := ListModes()
+func pickFreq(width, height uint32, display string) (uint32, error) {
+	modes, err := ListModes(display)
 	if err != nil {
 		return 0, err
 	}
 
-	cur, _ := GetCurrent()
+	cur, _ := GetCurrent(display)
 
 	var best uint32
 	var found bool
