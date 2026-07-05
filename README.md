@@ -58,7 +58,9 @@ cd resctl
 
 #### Option 1 — Download a release (recommended)
 
-1. Grab `resctl` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
+1. Grab the binary for your architecture from the [latest release](https://github.com/dever-labs/resctl/releases/latest):
+   - `resctl` — x86-64 (most desktops/laptops)
+   - `resctl-linux-arm64` — ARM64 (Raspberry Pi 4/5, Asahi Linux, ARM cloud VMs)
 2. Optionally verify the download against `checksums.txt` (also in the release assets):
 
    ```sh
