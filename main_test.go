@@ -48,25 +48,37 @@ func TestParseResolution(t *testing.T) {
 	}
 }
 
-func TestPrintJSON_Resolution(t *testing.T) {
-	r, w, _ := os.Pipe()
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
 	old := os.Stdout
 	os.Stdout = w
-
-	res := Resolution{Width: 1920, Height: 1080, Freq: 60}
-	if err := printJSON(res); err != nil {
-		t.Fatalf("printJSON: %v", err)
+	fn()
+	if err := w.Close(); err != nil {
+		t.Fatalf("w.Close: %v", err)
 	}
-
-	w.Close()
 	os.Stdout = old
-
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("buf.ReadFrom: %v", err)
+	}
+	return buf.String()
+}
+
+func TestPrintJSON_Resolution(t *testing.T) {
+	res := Resolution{Width: 1920, Height: 1080, Freq: 60}
+	out := captureStdout(t, func() {
+		if err := printJSON(res); err != nil {
+			t.Fatalf("printJSON: %v", err)
+		}
+	})
 
 	var got Resolution
-	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
-		t.Fatalf("unmarshal: %v — output was: %s", err, buf.String())
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal: %v — output was: %s", err, out)
 	}
 	if got != res {
 		t.Errorf("got %+v, want %+v", got, res)
@@ -74,27 +86,19 @@ func TestPrintJSON_Resolution(t *testing.T) {
 }
 
 func TestPrintJSON_ResolutionSlice(t *testing.T) {
-	r, w, _ := os.Pipe()
-	old := os.Stdout
-	os.Stdout = w
-
 	modes := []Resolution{
 		{Width: 1920, Height: 1080, Freq: 60},
 		{Width: 2560, Height: 1440, Freq: 144},
 	}
-	if err := printJSON(modes); err != nil {
-		t.Fatalf("printJSON: %v", err)
-	}
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	out := captureStdout(t, func() {
+		if err := printJSON(modes); err != nil {
+			t.Fatalf("printJSON: %v", err)
+		}
+	})
 
 	var got []Resolution
-	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
-		t.Fatalf("unmarshal: %v — output was: %s", err, buf.String())
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("unmarshal: %v — output was: %s", err, out)
 	}
 	if len(got) != len(modes) {
 		t.Fatalf("got %d items, want %d", len(got), len(modes))
@@ -107,25 +111,17 @@ func TestPrintJSON_ResolutionSlice(t *testing.T) {
 }
 
 func TestPrintJSON_Keys(t *testing.T) {
-	r, w, _ := os.Pipe()
-	old := os.Stdout
-	os.Stdout = w
-
-	_ = printJSON(Resolution{Width: 1920, Height: 1080, Freq: 60})
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	out := captureStdout(t, func() {
+		_ = printJSON(Resolution{Width: 1920, Height: 1080, Freq: 60})
+	})
 
 	var m map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
+	if err := json.Unmarshal([]byte(out), &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	for _, key := range []string{"width", "height", "freq"} {
 		if _, ok := m[key]; !ok {
-			t.Errorf("JSON output missing key %q: %s", key, buf.String())
+			t.Errorf("JSON output missing key %q: %s", key, out)
 		}
 	}
 }
