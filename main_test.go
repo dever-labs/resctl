@@ -125,3 +125,67 @@ func TestPrintJSON_Keys(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCommandFlags(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		wantArgs    []string
+		wantJSON    bool
+		wantDisplay string
+		wantErr     bool
+	}{
+		{
+			name:        "display separate token",
+			args:        []string{"--json", "--display", "DP-1", "1920x1080"},
+			wantArgs:    []string{"1920x1080"},
+			wantJSON:    true,
+			wantDisplay: "DP-1",
+		},
+		{
+			name:        "display equals syntax",
+			args:        []string{"toggle", "--display=HDMI-1", "1920x1080"},
+			wantArgs:    []string{"toggle", "1920x1080"},
+			wantDisplay: "HDMI-1",
+		},
+		{
+			name:    "missing display value",
+			args:    []string{"--display"},
+			wantErr: true,
+		},
+		{
+			name:    "empty display value",
+			args:    []string{"--display="},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotArgs, gotJSON, gotDisplay, err := parseCommandFlags(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseCommandFlags(%v): %v", tt.args, err)
+			}
+			if gotJSON != tt.wantJSON {
+				t.Errorf("jsonOut = %v, want %v", gotJSON, tt.wantJSON)
+			}
+			if gotDisplay != tt.wantDisplay {
+				t.Errorf("display = %q, want %q", gotDisplay, tt.wantDisplay)
+			}
+			if len(gotArgs) != len(tt.wantArgs) {
+				t.Fatalf("args len = %d, want %d (%v)", len(gotArgs), len(tt.wantArgs), gotArgs)
+			}
+			for i := range gotArgs {
+				if gotArgs[i] != tt.wantArgs[i] {
+					t.Fatalf("args[%d] = %q, want %q", i, gotArgs[i], tt.wantArgs[i])
+				}
+			}
+		})
+	}
+}

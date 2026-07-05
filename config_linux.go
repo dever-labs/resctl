@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ToggleState persists the user's toggle list and current position.
@@ -21,12 +22,19 @@ func configDir() string {
 	return filepath.Join(os.Getenv("HOME"), ".config", "resctl")
 }
 
-func stateFile() string {
-	return filepath.Join(configDir(), "state.json")
+func sanitizeDisplayName(display string) string {
+	return strings.NewReplacer("/", "-", "\\", "-", " ", "-").Replace(display)
 }
 
-func loadState() (ToggleState, error) {
-	data, err := os.ReadFile(stateFile())
+func stateFile(display string) string {
+	if display == "" {
+		return filepath.Join(configDir(), "state.json")
+	}
+	return filepath.Join(configDir(), "state-"+sanitizeDisplayName(display)+".json")
+}
+
+func loadState(display string) (ToggleState, error) {
+	data, err := os.ReadFile(stateFile(display))
 	if err != nil {
 		return ToggleState{}, err
 	}
@@ -37,7 +45,7 @@ func loadState() (ToggleState, error) {
 	return state, nil
 }
 
-func saveState(state ToggleState) error {
+func saveState(state ToggleState, display string) error {
 	if err := os.MkdirAll(configDir(), 0o755); err != nil {
 		return err
 	}
@@ -45,5 +53,5 @@ func saveState(state ToggleState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(stateFile(), data, 0o644)
+	return os.WriteFile(stateFile(display), data, 0o644)
 }

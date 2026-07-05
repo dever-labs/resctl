@@ -42,27 +42,45 @@ func xrandrQuery() (string, error) {
 }
 
 // parseXrandrOutput parses xrandr --query output into available modes,
-// the current resolution, and the primary output name.
-// It targets the output marked as "primary", falling back to the first connected output.
-func parseXrandrOutput(output string) (modes []Resolution, current Resolution, outputName string, err error) {
+// the current resolution, and the selected output name.
+// When display is empty, it targets the primary output, falling back to the
+// first connected output.
+func parseXrandrOutput(output, display string) (modes []Resolution, current Resolution, outputName string, err error) {
 	lines := strings.Split(output, "\n")
 
-	// Find the primary or first connected output.
 	startLine := -1
-	for i, line := range lines {
-		if !strings.Contains(line, " connected") {
-			continue
-		}
-		if startLine == -1 {
-			startLine = i // first connected – use as fallback
-		}
-		if strings.Contains(line, " connected primary") {
-			startLine = i // prefer primary
+	if display != "" {
+		for i, line := range lines {
+			fields := strings.Fields(line)
+			if len(fields) == 0 || fields[0] != display {
+				continue
+			}
+			if !strings.Contains(line, " connected") {
+				return nil, Resolution{}, "", fmt.Errorf("display %q is not connected", display)
+			}
+			startLine = i
 			break
 		}
-	}
-	if startLine == -1 {
-		return nil, Resolution{}, "", fmt.Errorf("no connected display found in xrandr output")
+		if startLine == -1 {
+			return nil, Resolution{}, "", fmt.Errorf("display %q not found", display)
+		}
+	} else {
+		// Find the primary or first connected output.
+		for i, line := range lines {
+			if !strings.Contains(line, " connected") {
+				continue
+			}
+			if startLine == -1 {
+				startLine = i // first connected – use as fallback
+			}
+			if strings.Contains(line, " connected primary") {
+				startLine = i // prefer primary
+				break
+			}
+		}
+		if startLine == -1 {
+			return nil, Resolution{}, "", fmt.Errorf("no connected display found in xrandr output")
+		}
 	}
 
 	fields := strings.Fields(lines[startLine])
@@ -134,10 +152,10 @@ func parseXrandrOutput(output string) (modes []Resolution, current Resolution, o
 
 // --- public API ---
 
-// GetCurrent returns the primary display's current resolution.
-func GetCurrent() (Resolution, error) {
+// GetCurrent returns the selected display's current resolution.
+func GetCurrent(display string) (Resolution, error) {
 	if isWayland() {
-		_, current, _, err := wlrNativeQuery()
+		_, current, _, err := wlrNativeQuery(display)
 		if err != nil {
 			return Resolution{}, err
 		}
@@ -151,7 +169,7 @@ func GetCurrent() (Resolution, error) {
 	if err != nil {
 		return Resolution{}, err
 	}
-	_, current, _, err := parseXrandrOutput(raw)
+	_, current, _, err := parseXrandrOutput(raw, display)
 	if err != nil {
 		return Resolution{}, err
 	}
@@ -161,10 +179,10 @@ func GetCurrent() (Resolution, error) {
 	return current, nil
 }
 
-// ListModes returns all available display modes for the primary monitor.
-func ListModes() ([]Resolution, error) {
+// ListModes returns all available display modes for the selected display.
+func ListModes(display string) ([]Resolution, error) {
 	if isWayland() {
-		modes, _, _, err := wlrNativeQuery()
+		modes, _, _, err := wlrNativeQuery(display)
 		return modes, err
 	}
 
@@ -172,34 +190,34 @@ func ListModes() ([]Resolution, error) {
 	if err != nil {
 		return nil, err
 	}
-	modes, _, _, err := parseXrandrOutput(raw)
+	modes, _, _, err := parseXrandrOutput(raw, display)
 	return modes, err
 }
 
-// SetResolution changes the primary display resolution.
-func SetResolution(width, height, freq uint32) (Resolution, error) {
+// SetResolution changes the selected display resolution.
+func SetResolution(width, height, freq uint32, display string) (Resolution, error) {
 	if isWayland() {
-		return setResolutionWayland(width, height, freq)
+		return setResolutionWayland(width, height, freq, display)
 	}
-	return setResolutionX11(width, height, freq)
+	return setResolutionX11(width, height, freq, display)
 }
 
-func setResolutionWayland(width, height, freq uint32) (Resolution, error) {
-	return wlrNativeSet(width, height, freq)
+func setResolutionWayland(width, height, freq uint32, display string) (Resolution, error) {
+	return wlrNativeSet(width, height, freq, display)
 }
 
-func setResolutionX11(width, height, freq uint32) (Resolution, error) {
+func setResolutionX11(width, height, freq uint32, display string) (Resolution, error) {
 	raw, err := xrandrQuery()
 	if err != nil {
 		return Resolution{}, err
 	}
-	_, _, outputName, err := parseXrandrOutput(raw)
+	_, _, outputName, err := parseXrandrOutput(raw, display)
 	if err != nil {
 		return Resolution{}, err
 	}
 
 	if freq == 0 {
-		if resolved, ferr := pickFreq(width, height); ferr == nil {
+		if resolved, ferr := pickFreq(width, height, display); ferr == nil {
 			freq = resolved
 		}
 	}
@@ -213,7 +231,7 @@ func setResolutionX11(width, height, freq uint32) (Resolution, error) {
 		return Resolution{}, fmt.Errorf("xrandr failed: %s", strings.TrimSpace(string(out)))
 	}
 
-	cur, err := GetCurrent()
+	cur, err := GetCurrent(display)
 	if err != nil {
 		return Resolution{Width: width, Height: height, Freq: freq}, nil
 	}
@@ -222,13 +240,13 @@ func setResolutionX11(width, height, freq uint32) (Resolution, error) {
 
 // pickFreq finds the best refresh rate for width×height.
 // Prefers the current rate; falls back to the highest available.
-func pickFreq(width, height uint32) (uint32, error) {
-	modes, err := ListModes()
+func pickFreq(width, height uint32, display string) (uint32, error) {
+	modes, err := ListModes(display)
 	if err != nil {
 		return 0, err
 	}
 
-	cur, _ := GetCurrent()
+	cur, _ := GetCurrent(display)
 
 	var best uint32
 	var found bool

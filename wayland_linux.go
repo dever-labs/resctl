@@ -452,6 +452,16 @@ func (c *wlrClient) firstEnabledHead() *wlrHeadInfo {
 	return nil
 }
 
+func (c *wlrClient) headByName(name string) *wlrHeadInfo {
+	for _, id := range c.headOrder {
+		h := c.heads[id]
+		if h.name == name && h.enabled && !h.finished {
+			return h
+		}
+	}
+	return nil
+}
+
 // pickFreqFromHead selects the best refresh rate for width×height from the
 // head's already-enumerated modes. Prefers the current rate; falls back to
 // the highest available. Returns 0 if no matching mode is found.
@@ -499,7 +509,7 @@ func (c *wlrClient) findMode(head *wlrHeadInfo, width, height, freq uint32) *wlr
 
 // wlrNativeQuery connects to the Wayland socket, enumerates outputs and modes,
 // and returns the sorted mode list, the current mode, and the output name.
-func wlrNativeQuery() (modes []Resolution, current Resolution, outputName string, err error) {
+func wlrNativeQuery(display string) (modes []Resolution, current Resolution, outputName string, err error) {
 	c, err := wlrDial()
 	if err != nil {
 		return nil, Resolution{}, "", err
@@ -523,7 +533,12 @@ func wlrNativeQuery() (modes []Resolution, current Resolution, outputName string
 	}
 
 	head := c.firstEnabledHead()
-	if head == nil {
+	if display != "" {
+		head = c.headByName(display)
+		if head == nil {
+			return nil, Resolution{}, "", fmt.Errorf("display %q not found", display)
+		}
+	} else if head == nil {
 		return nil, Resolution{}, "", fmt.Errorf("no enabled display found")
 	}
 
@@ -558,7 +573,7 @@ func wlrNativeQuery() (modes []Resolution, current Resolution, outputName string
 }
 
 // wlrNativeSet applies a new display mode via the zwlr-output-management protocol.
-func wlrNativeSet(width, height, freq uint32) (Resolution, error) {
+func wlrNativeSet(width, height, freq uint32, display string) (Resolution, error) {
 	c, err := wlrDial()
 	if err != nil {
 		return Resolution{}, err
@@ -579,7 +594,12 @@ func wlrNativeSet(width, height, freq uint32) (Resolution, error) {
 	}
 
 	head := c.firstEnabledHead()
-	if head == nil {
+	if display != "" {
+		head = c.headByName(display)
+		if head == nil {
+			return Resolution{}, fmt.Errorf("display %q not found", display)
+		}
+	} else if head == nil {
 		return Resolution{}, fmt.Errorf("no enabled display found")
 	}
 

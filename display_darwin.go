@@ -6,6 +6,7 @@ package main
 #cgo darwin LDFLAGS: -framework CoreGraphics -framework CoreFoundation
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <stdint.h>
 
 static CGDisplayModeRef resctl_current_mode(CGDirectDisplayID display) {
 	return CGDisplayCopyDisplayMode(display);
@@ -29,20 +30,13 @@ static CFArrayRef resctl_all_modes(CGDirectDisplayID display) {
 	return modes;
 }
 
-static CGDirectDisplayID resctl_primary_display(void) {
-	CGDirectDisplayID main = CGMainDisplayID();
-	CGDirectDisplayID displays[32];
+static uint32_t resctl_active_displays(CGDirectDisplayID *displays, uint32_t max) {
 	uint32_t count = 0;
-	CGError err = CGGetActiveDisplayList(32, displays, &count);
-	if (err == kCGErrorSuccess && count > 0) {
-		for (uint32_t i = 0; i < count; i++) {
-			if (displays[i] == main) {
-				return main;
-			}
-		}
-		return displays[0];
+	CGError err = CGGetActiveDisplayList(max, displays, &count);
+	if (err != kCGErrorSuccess) {
+		return 0;
 	}
-	return main;
+	return count;
 }
 
 static CGDisplayModeRef resctl_mode_at(CFArrayRef modes, CFIndex index) {
@@ -66,6 +60,7 @@ import "C"
 import (
 	"fmt"
 	"sort"
+	"strconv"
 )
 
 // Resolution holds a display mode.
@@ -79,8 +74,25 @@ func (r Resolution) String() string {
 	return fmt.Sprintf("%dx%d@%dHz", r.Width, r.Height, r.Freq)
 }
 
-func mainDisplayID() C.CGDirectDisplayID {
-	return C.resctl_primary_display()
+func resolveDisplayID(display string) (C.CGDirectDisplayID, error) {
+	if display == "" {
+		return C.CGMainDisplayID(), nil
+	}
+
+	index, err := strconv.Atoi(display)
+	if err != nil || index < 1 {
+		return 0, fmt.Errorf("display %q must be a 1-based index like 1 or 2", display)
+	}
+
+	var displays [32]C.CGDirectDisplayID
+	count := int(C.resctl_active_displays(&displays[0], C.uint32_t(len(displays))))
+	if count == 0 {
+		return 0, fmt.Errorf("could not enumerate active displays")
+	}
+	if index > count {
+		return 0, fmt.Errorf("display %q is out of range (found %d active displays)", display, count)
+	}
+	return displays[index-1], nil
 }
 
 func resolutionFromMode(mode C.CGDisplayModeRef) Resolution {
@@ -97,9 +109,14 @@ func resolutionFromMode(mode C.CGDisplayModeRef) Resolution {
 	}
 }
 
-// GetCurrent returns the main display's current resolution.
-func GetCurrent() (Resolution, error) {
-	mode := C.resctl_current_mode(mainDisplayID())
+// GetCurrent returns the selected display's current resolution.
+func GetCurrent(display string) (Resolution, error) {
+	displayID, err := resolveDisplayID(display)
+	if err != nil {
+		return Resolution{}, err
+	}
+
+	mode := C.resctl_current_mode(displayID)
 	if mode == 0 {
 		return Resolution{}, fmt.Errorf("CGDisplayCopyDisplayMode failed")
 	}
@@ -108,9 +125,14 @@ func GetCurrent() (Resolution, error) {
 	return resolutionFromMode(mode), nil
 }
 
-// ListModes returns all unique display modes for the main display.
-func ListModes() ([]Resolution, error) {
-	modesRef := C.resctl_all_modes(mainDisplayID())
+// ListModes returns all unique display modes for the selected display.
+func ListModes(display string) ([]Resolution, error) {
+	displayID, err := resolveDisplayID(display)
+	if err != nil {
+		return nil, err
+	}
+
+	modesRef := C.resctl_all_modes(displayID)
 	if modesRef == 0 {
 		return nil, fmt.Errorf("CGDisplayCopyAllDisplayModes failed")
 	}
@@ -146,9 +168,13 @@ func ListModes() ([]Resolution, error) {
 	return modes, nil
 }
 
-// SetResolution changes the main display resolution.
-func SetResolution(width, height, freq uint32) (Resolution, error) {
-	displayID := mainDisplayID()
+// SetResolution changes the selected display resolution.
+func SetResolution(width, height, freq uint32, display string) (Resolution, error) {
+	displayID, err := resolveDisplayID(display)
+	if err != nil {
+		return Resolution{}, err
+	}
+
 	modesRef := C.resctl_all_modes(displayID)
 	if modesRef == 0 {
 		return Resolution{}, fmt.Errorf("CGDisplayCopyAllDisplayModes failed")
@@ -156,7 +182,7 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 	defer C.resctl_release_modes(modesRef)
 
 	if freq == 0 {
-		if resolved, err := pickFreq(width, height); err == nil {
+		if resolved, err := pickFreq(width, height, display); err == nil {
 			freq = resolved
 		}
 	}
@@ -185,7 +211,7 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 		return Resolution{}, fmt.Errorf("CGDisplaySetDisplayMode failed (code %d)", int32(result))
 	}
 
-	cur, err := GetCurrent()
+	cur, err := GetCurrent(display)
 	if err != nil {
 		return Resolution{Width: width, Height: height, Freq: freq}, nil
 	}
@@ -194,13 +220,13 @@ func SetResolution(width, height, freq uint32) (Resolution, error) {
 
 // pickFreq finds the best refresh rate for width x height.
 // Prefers the current rate; falls back to the highest available.
-func pickFreq(width, height uint32) (uint32, error) {
-	modes, err := ListModes()
+func pickFreq(width, height uint32, display string) (uint32, error) {
+	modes, err := ListModes(display)
 	if err != nil {
 		return 0, err
 	}
 
-	cur, _ := GetCurrent()
+	cur, _ := GetCurrent(display)
 
 	var best uint32
 	var found bool

@@ -14,10 +14,10 @@ var version = "dev"
 const usage = `resctl - display resolution manager
 
 Usage:
-  resctl list [--json]           List available resolutions
-  resctl get [--json]            Show current resolution
-  resctl set <WxH[@Hz]>          Set resolution
-  resctl toggle [res1 res2 ...]  Toggle between resolutions
+  resctl list [--json] [--display <name>]           List available resolutions
+  resctl get [--json] [--display <name>]            Show current resolution
+  resctl set <WxH[@Hz]> [--display <name>]          Set resolution
+  resctl toggle [res1 res2 ...] [--display <name>]  Toggle between resolutions
   resctl install                 Copy to ~/bin and add to PATH
   resctl uninstall               Remove from ~/bin
   resctl version                 Print version
@@ -25,11 +25,13 @@ Usage:
 Resolution format:  WxH  or  WxH@Hz  (e.g. 1920x1080  or  2560x1440@144)
 
 Flags:
-  --json   Output as JSON (supported by list and get)
+  --json              Output as JSON (supported by list and get)
+  --display <name>    Target a specific display
 
 Examples:
   resctl set 1920x1080
   resctl set 2560x1440@144
+  resctl set 2560x1440@144 --display DP-1
   resctl toggle 1920x1080 2560x1440    # set list + switch immediately
   resctl toggle                        # cycle to next in saved list
   resctl get --json
@@ -45,31 +47,23 @@ func main() {
 	cmd := strings.ToLower(os.Args[1])
 	args := os.Args[2:]
 
-	// Strip --json from args and record whether it was present.
-	jsonOut := false
-	filtered := args[:0]
-	for _, a := range args {
-		if a == "--json" {
-			jsonOut = true
-		} else {
-			filtered = append(filtered, a)
-		}
+	args, jsonOut, display, err := parseCommandFlags(args)
+	if err != nil {
+		fatalf("%v\n\n%s", err, usage)
 	}
-	args = filtered
 
-	var err error
 	switch cmd {
 	case "list":
-		err = cmdList(jsonOut)
+		err = cmdList(jsonOut, display)
 	case "get":
-		err = cmdGet(jsonOut)
+		err = cmdGet(jsonOut, display)
 	case "set":
 		if len(args) == 0 {
 			fatalf("set requires a resolution argument\n\n%s", usage)
 		}
-		err = cmdSet(args[0])
+		err = cmdSet(args[0], display)
 	case "toggle":
-		err = cmdToggle(args)
+		err = cmdToggle(args, display)
 	case "install":
 		err = install()
 	case "uninstall":
@@ -92,8 +86,33 @@ func fatalf(format string, a ...any) {
 	os.Exit(1)
 }
 
-func cmdList(jsonOut bool) error {
-	modes, err := ListModes()
+func parseCommandFlags(args []string) (filtered []string, jsonOut bool, display string, err error) {
+	filtered = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--json":
+			jsonOut = true
+		case arg == "--display":
+			i++
+			if i >= len(args) {
+				return nil, false, "", fmt.Errorf("--display requires a value")
+			}
+			display = args[i]
+		case strings.HasPrefix(arg, "--display="):
+			display = strings.TrimPrefix(arg, "--display=")
+			if display == "" {
+				return nil, false, "", fmt.Errorf("--display requires a value")
+			}
+		default:
+			filtered = append(filtered, arg)
+		}
+	}
+	return filtered, jsonOut, display, nil
+}
+
+func cmdList(jsonOut bool, display string) error {
+	modes, err := ListModes(display)
 	if err != nil {
 		return err
 	}
@@ -102,8 +121,8 @@ func cmdList(jsonOut bool) error {
 		return printJSON(modes)
 	}
 
-	cur, _ := GetCurrent()
-	fmt.Println("Available resolutions (primary display):")
+	cur, _ := GetCurrent(display)
+	fmt.Println("Available resolutions:")
 	for _, m := range modes {
 		active := "  "
 		if m.Width == cur.Width && m.Height == cur.Height && m.Freq == cur.Freq {
@@ -114,8 +133,8 @@ func cmdList(jsonOut bool) error {
 	return nil
 }
 
-func cmdGet(jsonOut bool) error {
-	cur, err := GetCurrent()
+func cmdGet(jsonOut bool, display string) error {
+	cur, err := GetCurrent(display)
 	if err != nil {
 		return err
 	}
@@ -132,12 +151,12 @@ func printJSON(v any) error {
 	return enc.Encode(v)
 }
 
-func cmdSet(arg string) error {
+func cmdSet(arg, display string) error {
 	width, height, freq, err := parseResolution(arg)
 	if err != nil {
 		return err
 	}
-	res, err := SetResolution(width, height, freq)
+	res, err := SetResolution(width, height, freq, display)
 	if err != nil {
 		return err
 	}
@@ -145,14 +164,14 @@ func cmdSet(arg string) error {
 	return nil
 }
 
-func cmdToggle(args []string) error {
+func cmdToggle(args []string, display string) error {
 	var state ToggleState
 
 	if len(args) > 0 {
 		state.Resolutions = args
 		// Position the index at the current resolution so the first toggle
 		// moves to the next one in the list.
-		cur, _ := GetCurrent()
+		cur, _ := GetCurrent(display)
 		curBase := fmt.Sprintf("%dx%d", cur.Width, cur.Height)
 		for i, r := range args {
 			base := strings.SplitN(strings.ToLower(strings.TrimSpace(r)), "@", 2)[0]
@@ -162,9 +181,9 @@ func cmdToggle(args []string) error {
 			}
 		}
 	} else {
-		var err error
-		state, err = loadState()
-		if err != nil || len(state.Resolutions) == 0 {
+		var loadErr error
+		state, loadErr = loadState(display)
+		if loadErr != nil || len(state.Resolutions) == 0 {
 			return fmt.Errorf("no toggle list configured — run: resctl toggle <res1> <res2>")
 		}
 	}
@@ -177,12 +196,12 @@ func cmdToggle(args []string) error {
 		return fmt.Errorf("invalid entry %q in toggle list: %w", target, err)
 	}
 
-	res, err := SetResolution(width, height, freq)
+	res, err := SetResolution(width, height, freq, display)
 	if err != nil {
 		return err
 	}
 
-	if saveErr := saveState(state); saveErr != nil {
+	if saveErr := saveState(state, display); saveErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not save toggle state: %v\n", saveErr)
 	}
 

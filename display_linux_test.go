@@ -14,7 +14,7 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
 DP-1 disconnected (normal left inverted right x axis y axis)
 `
 
-	modes, current, outputName, err := parseXrandrOutput(sample)
+	modes, current, outputName, err := parseXrandrOutput(sample, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,7 +39,7 @@ HDMI-1 connected 1920x1080+2560+0 (normal left inverted right x axis y axis) 527
    1920x1080     60.00*+
 `
 
-	_, _, outputName, err := parseXrandrOutput(sample)
+	_, _, outputName, err := parseXrandrOutput(sample, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -59,7 +59,7 @@ HDMI-1 connected primary 2560x1440+1920+0 (normal left inverted right x axis y a
    2560x1440    144.00*+  60.00
 `
 
-	_, _, outputName, err := parseXrandrOutput(sample)
+	_, _, outputName, err := parseXrandrOutput(sample, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +76,7 @@ DP-1 disconnected (normal left inverted right x axis y axis)
 HDMI-1 disconnected (normal left inverted right x axis y axis)
 `
 
-	_, _, _, err := parseXrandrOutput(sample)
+	_, _, _, err := parseXrandrOutput(sample, "")
 	if err == nil {
 		t.Error("expected error for no connected display, got nil")
 	}
@@ -90,7 +90,7 @@ DP-1 connected primary 2560x1440+0+0 (normal left inverted right x axis y axis) 
    2560x1440    143.97*+  59.95
 `
 
-	modes, current, _, err := parseXrandrOutput(sample)
+	modes, current, _, err := parseXrandrOutput(sample, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,5 +102,40 @@ DP-1 connected primary 2560x1440+0+0 (normal left inverted right x axis y axis) 
 	}
 	if modes[0].Freq != 60 || modes[1].Freq != 144 {
 		t.Errorf("modes = %v, want [{60} {144}]", modes)
+	}
+}
+
+func TestParseXrandrOutput_DisplaySelection(t *testing.T) {
+	const sample = `Screen 0: minimum 8 x 8, current 2560 x 1440, maximum 32767 x 32767
+DP-1 connected 2560x1440+0+0 (normal left inverted right x axis y axis) 597mm x 336mm
+   2560x1440    144.00*+  60.00
+HDMI-1 connected primary 1920x1080+2560+0 (normal left inverted right x axis y axis) 527mm x 296mm
+   1920x1080     60.00*+
+`
+
+	modes, current, outputName, err := parseXrandrOutput(sample, "DP-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if outputName != "DP-1" {
+		t.Errorf("outputName = %q, want DP-1", outputName)
+	}
+	if current != (Resolution{Width: 2560, Height: 1440, Freq: 144}) {
+		t.Errorf("current = %v, want 2560x1440@144", current)
+	}
+	if len(modes) != 2 {
+		t.Errorf("len(modes) = %d, want 2", len(modes))
+	}
+}
+
+func TestParseXrandrOutput_DisplayNotFound(t *testing.T) {
+	const sample = `Screen 0: minimum 8 x 8, current 1920 x 1080, maximum 32767 x 32767
+HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 527mm x 296mm
+   1920x1080     60.00*+
+`
+
+	_, _, _, err := parseXrandrOutput(sample, "DP-1")
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }

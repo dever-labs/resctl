@@ -124,6 +124,34 @@ func TestFindMode(t *testing.T) {
 	})
 }
 
+func TestHeadByName(t *testing.T) {
+	headA := &wlrHeadInfo{id: 1, name: "DP-1", enabled: true}
+	headB := &wlrHeadInfo{id: 2, name: "HDMI-A-1", enabled: false}
+	headFinished := &wlrHeadInfo{id: 3, name: "DP-2", enabled: true, finished: true}
+
+	c := &wlrClient{
+		heads: map[uint32]*wlrHeadInfo{
+			1: headA,
+			2: headB,
+			3: headFinished,
+		},
+		headOrder: []uint32{1, 2, 3},
+	}
+
+	if got := c.headByName("DP-1"); got != headA {
+		t.Fatalf("headByName(DP-1) = %v, want %v", got, headA)
+	}
+	if got := c.headByName("HDMI-A-1"); got != nil {
+		t.Fatalf("headByName(disabled) = %v, want nil", got)
+	}
+	if got := c.headByName("DP-2"); got != nil {
+		t.Fatalf("headByName(finished) = %v, want nil", got)
+	}
+	if got := c.headByName("missing"); got != nil {
+		t.Fatalf("headByName(missing) = %v, want nil", got)
+	}
+}
+
 // --- onHeadEvent opcodes 6/7/8 ---
 
 func makeU32(v uint32) []byte {
