@@ -13,9 +13,9 @@ import (
 
 // Resolution holds a display mode.
 type Resolution struct {
-	Width  uint32
-	Height uint32
-	Freq   uint32
+	Width  uint32 `json:"width"`
+	Height uint32 `json:"height"`
+	Freq   uint32 `json:"freq"`
 }
 
 func (r Resolution) String() string {

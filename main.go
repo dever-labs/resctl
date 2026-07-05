@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -13,8 +14,8 @@ var version = "dev"
 const usage = `resctl - display resolution manager
 
 Usage:
-  resctl list                    List available resolutions
-  resctl get                     Show current resolution
+  resctl list [--json]           List available resolutions
+  resctl get [--json]            Show current resolution
   resctl set <WxH[@Hz]>          Set resolution
   resctl toggle [res1 res2 ...]  Toggle between resolutions
   resctl install                 Copy to ~/bin and add to PATH
@@ -23,11 +24,16 @@ Usage:
 
 Resolution format:  WxH  or  WxH@Hz  (e.g. 1920x1080  or  2560x1440@144)
 
+Flags:
+  --json   Output as JSON (supported by list and get)
+
 Examples:
   resctl set 1920x1080
   resctl set 2560x1440@144
   resctl toggle 1920x1080 2560x1440    # set list + switch immediately
   resctl toggle                        # cycle to next in saved list
+  resctl get --json
+  resctl list --json
 `
 
 func main() {
@@ -39,12 +45,24 @@ func main() {
 	cmd := strings.ToLower(os.Args[1])
 	args := os.Args[2:]
 
+	// Strip --json from args and record whether it was present.
+	jsonOut := false
+	filtered := args[:0]
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+		} else {
+			filtered = append(filtered, a)
+		}
+	}
+	args = filtered
+
 	var err error
 	switch cmd {
 	case "list":
-		err = cmdList()
+		err = cmdList(jsonOut)
 	case "get":
-		err = cmdGet()
+		err = cmdGet(jsonOut)
 	case "set":
 		if len(args) == 0 {
 			fatalf("set requires a resolution argument\n\n%s", usage)
@@ -74,13 +92,17 @@ func fatalf(format string, a ...any) {
 	os.Exit(1)
 }
 
-func cmdList() error {
+func cmdList(jsonOut bool) error {
 	modes, err := ListModes()
 	if err != nil {
 		return err
 	}
-	cur, _ := GetCurrent()
 
+	if jsonOut {
+		return printJSON(modes)
+	}
+
+	cur, _ := GetCurrent()
 	fmt.Println("Available resolutions (primary display):")
 	for _, m := range modes {
 		active := "  "
@@ -92,13 +114,22 @@ func cmdList() error {
 	return nil
 }
 
-func cmdGet() error {
+func cmdGet(jsonOut bool) error {
 	cur, err := GetCurrent()
 	if err != nil {
 		return err
 	}
+	if jsonOut {
+		return printJSON(cur)
+	}
 	fmt.Printf("Current: %dx%d @ %dHz\n", cur.Width, cur.Height, cur.Freq)
 	return nil
+}
+
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(v)
 }
 
 func cmdSet(arg string) error {
