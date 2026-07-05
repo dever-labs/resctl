@@ -122,7 +122,9 @@ func shellRCFile() string {
 	case strings.HasSuffix(shell, "zsh"):
 		return filepath.Join(home, ".zshrc")
 	case strings.HasSuffix(shell, "bash"):
-		return filepath.Join(home, ".bashrc")
+		// macOS terminals open login shells by default, which source
+		// ~/.bash_profile, not ~/.bashrc.
+		return filepath.Join(home, ".bash_profile")
 	case strings.HasSuffix(shell, "fish"):
 		return filepath.Join(home, ".config", "fish", "config.fish")
 	default:

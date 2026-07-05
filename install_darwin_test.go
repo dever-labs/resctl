@@ -21,8 +21,8 @@ func TestShellRCFile(t *testing.T) {
 		{"/opt/homebrew/bin/fish", filepath.Join(home, ".config", "fish", "config.fish")},
 		{"/bin/zsh", filepath.Join(home, ".zshrc")},
 		{"/usr/bin/zsh", filepath.Join(home, ".zshrc")},
-		{"/bin/bash", filepath.Join(home, ".bashrc")},
-		{"/usr/bin/bash", filepath.Join(home, ".bashrc")},
+		{"/bin/bash", filepath.Join(home, ".bash_profile")},
+		{"/usr/bin/bash", filepath.Join(home, ".bash_profile")},
 		{"/bin/sh", filepath.Join(home, ".profile")},
 		{"", filepath.Join(home, ".profile")},
 	}
@@ -82,18 +82,18 @@ func TestAddToShellPathBash(t *testing.T) {
 		t.Fatalf("addToShellPath: %v", err)
 	}
 
-	rcFile := filepath.Join(home, ".bashrc")
+	rcFile := filepath.Join(home, ".bash_profile")
 	data, err := os.ReadFile(rcFile)
 	if err != nil {
-		t.Fatalf("read .bashrc: %v", err)
+		t.Fatalf("read .bash_profile: %v", err)
 	}
 	content := string(data)
 
 	if !strings.Contains(content, "export PATH") {
-		t.Errorf(".bashrc missing export PATH:\n%s", content)
+		t.Errorf(".bash_profile missing export PATH:\n%s", content)
 	}
 	if !strings.Contains(content, binDir) {
-		t.Errorf(".bashrc missing %q:\n%s", binDir, content)
+		t.Errorf(".bash_profile missing %q:\n%s", binDir, content)
 	}
 }
 
