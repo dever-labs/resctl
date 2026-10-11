@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -134,6 +135,8 @@ func TestParseCommandFlags(t *testing.T) {
 		wantJSON    bool
 		wantDisplay string
 		wantForce   bool
+		wantList    bool
+		wantClear   bool
 		wantErr     bool
 	}{
 		{
@@ -156,6 +159,23 @@ func TestParseCommandFlags(t *testing.T) {
 			wantForce: true,
 		},
 		{
+			name:     "list flag",
+			args:     []string{"--list"},
+			wantArgs: []string{},
+			wantList: true,
+		},
+		{
+			name:      "clear flag",
+			args:      []string{"--clear"},
+			wantArgs:  []string{},
+			wantClear: true,
+		},
+		{
+			name:    "list and clear together is an error",
+			args:    []string{"--list", "--clear"},
+			wantErr: true,
+		},
+		{
 			name:    "missing display value",
 			args:    []string{"--display"},
 			wantErr: true,
@@ -169,7 +189,7 @@ func TestParseCommandFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotArgs, gotJSON, gotDisplay, gotForce, err := parseCommandFlags(tt.args)
+			gotArgs, gotFlags, err := parseCommandFlags(tt.args)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -179,14 +199,20 @@ func TestParseCommandFlags(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseCommandFlags(%v): %v", tt.args, err)
 			}
-			if gotJSON != tt.wantJSON {
-				t.Errorf("jsonOut = %v, want %v", gotJSON, tt.wantJSON)
+			if gotFlags.JSON != tt.wantJSON {
+				t.Errorf("JSON = %v, want %v", gotFlags.JSON, tt.wantJSON)
 			}
-			if gotDisplay != tt.wantDisplay {
-				t.Errorf("display = %q, want %q", gotDisplay, tt.wantDisplay)
+			if gotFlags.Display != tt.wantDisplay {
+				t.Errorf("Display = %q, want %q", gotFlags.Display, tt.wantDisplay)
 			}
-			if gotForce != tt.wantForce {
-				t.Errorf("force = %v, want %v", gotForce, tt.wantForce)
+			if gotFlags.Force != tt.wantForce {
+				t.Errorf("Force = %v, want %v", gotFlags.Force, tt.wantForce)
+			}
+			if gotFlags.List != tt.wantList {
+				t.Errorf("List = %v, want %v", gotFlags.List, tt.wantList)
+			}
+			if gotFlags.Clear != tt.wantClear {
+				t.Errorf("Clear = %v, want %v", gotFlags.Clear, tt.wantClear)
 			}
 			if len(gotArgs) != len(tt.wantArgs) {
 				t.Fatalf("args len = %d, want %d (%v)", len(gotArgs), len(tt.wantArgs), gotArgs)
@@ -224,5 +250,94 @@ func TestIsNoOp(t *testing.T) {
 				t.Errorf("isNoOp(%+v, %d, %d, %d) = %v, want %v", cur, tt.width, tt.height, tt.freq, got, tt.want)
 			}
 		})
+	}
+}
+
+// withTempConfigDir redirects every platform's config-directory lookup
+// (Linux's XDG_CONFIG_HOME, Darwin's $HOME, Windows' %APPDATA%) at a fresh
+// temp dir, so loadState/saveState/clearState tests don't touch the real
+// user config regardless of which OS runs them.
+func withTempConfigDir(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", dir)
+	t.Setenv("APPDATA", dir)
+}
+
+func TestPrintToggleList_NoSavedState(t *testing.T) {
+	withTempConfigDir(t)
+
+	out := captureStdout(t, func() {
+		if err := printToggleList(""); err != nil {
+			t.Fatalf("printToggleList: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "No toggle list configured") {
+		t.Errorf("output = %q, want a message about no toggle list configured", out)
+	}
+}
+
+func TestPrintToggleList_WithSavedState(t *testing.T) {
+	withTempConfigDir(t)
+
+	state := ToggleState{Resolutions: []string{"1920x1080", "2560x1440"}, CurrentIndex: 1}
+	if err := saveState(state, ""); err != nil {
+		t.Fatalf("saveState: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := printToggleList(""); err != nil {
+			t.Fatalf("printToggleList: %v", err)
+		}
+	})
+
+	wantLines := []string{
+		"Toggle list:",
+		"  [0] 1920x1080",
+		"  [1] 2560x1440  ← current",
+	}
+	for _, want := range wantLines {
+		if !strings.Contains(out, want) {
+			t.Errorf("output = %q, want it to contain %q", out, want)
+		}
+	}
+}
+
+func TestClearToggleList_NoSavedState(t *testing.T) {
+	withTempConfigDir(t)
+
+	out := captureStdout(t, func() {
+		if err := clearToggleList(""); err != nil {
+			t.Fatalf("clearToggleList: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "No toggle list to clear") {
+		t.Errorf("output = %q, want a message about no toggle list to clear", out)
+	}
+}
+
+func TestClearToggleList_WithSavedState(t *testing.T) {
+	withTempConfigDir(t)
+
+	state := ToggleState{Resolutions: []string{"1920x1080"}}
+	if err := saveState(state, ""); err != nil {
+		t.Fatalf("saveState: %v", err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := clearToggleList(""); err != nil {
+			t.Fatalf("clearToggleList: %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "Toggle list cleared") {
+		t.Errorf("output = %q, want a message about the toggle list being cleared", out)
+	}
+
+	if _, err := loadState(""); err == nil {
+		t.Error("loadState after clear: expected error, got nil")
 	}
 }

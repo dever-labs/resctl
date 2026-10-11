@@ -64,3 +64,9 @@ func saveState(state ToggleState, display string) error {
 	}
 	return os.WriteFile(stateFile(display), data, 0o644)
 }
+
+// clearState deletes the saved toggle state file, if any. Returns an error
+// satisfying os.IsNotExist if no state was saved.
+func clearState(display string) error {
+	return os.Remove(stateFile(display))
+}
