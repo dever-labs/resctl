@@ -133,6 +133,7 @@ func TestParseCommandFlags(t *testing.T) {
 		wantArgs    []string
 		wantJSON    bool
 		wantDisplay string
+		wantForce   bool
 		wantErr     bool
 	}{
 		{
@@ -149,6 +150,12 @@ func TestParseCommandFlags(t *testing.T) {
 			wantDisplay: "HDMI-1",
 		},
 		{
+			name:      "force flag",
+			args:      []string{"1920x1080", "--force"},
+			wantArgs:  []string{"1920x1080"},
+			wantForce: true,
+		},
+		{
 			name:    "missing display value",
 			args:    []string{"--display"},
 			wantErr: true,
@@ -162,7 +169,7 @@ func TestParseCommandFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotArgs, gotJSON, gotDisplay, err := parseCommandFlags(tt.args)
+			gotArgs, gotJSON, gotDisplay, gotForce, err := parseCommandFlags(tt.args)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -178,6 +185,9 @@ func TestParseCommandFlags(t *testing.T) {
 			if gotDisplay != tt.wantDisplay {
 				t.Errorf("display = %q, want %q", gotDisplay, tt.wantDisplay)
 			}
+			if gotForce != tt.wantForce {
+				t.Errorf("force = %v, want %v", gotForce, tt.wantForce)
+			}
 			if len(gotArgs) != len(tt.wantArgs) {
 				t.Fatalf("args len = %d, want %d (%v)", len(gotArgs), len(tt.wantArgs), gotArgs)
 			}
@@ -185,6 +195,33 @@ func TestParseCommandFlags(t *testing.T) {
 				if gotArgs[i] != tt.wantArgs[i] {
 					t.Fatalf("args[%d] = %q, want %q", i, gotArgs[i], tt.wantArgs[i])
 				}
+			}
+		})
+	}
+}
+
+func TestIsNoOp(t *testing.T) {
+	cur := Resolution{Width: 1920, Height: 1080, Freq: 60}
+
+	tests := []struct {
+		name   string
+		width  uint32
+		height uint32
+		freq   uint32
+		want   bool
+	}{
+		{"same resolution, freq unspecified", 1920, 1080, 0, true},
+		{"same resolution and freq", 1920, 1080, 60, true},
+		{"same resolution, different freq", 1920, 1080, 144, false},
+		{"different width", 2560, 1080, 0, false},
+		{"different height", 1920, 1440, 0, false},
+		{"different resolution and freq", 2560, 1440, 144, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isNoOp(cur, tt.width, tt.height, tt.freq); got != tt.want {
+				t.Errorf("isNoOp(%+v, %d, %d, %d) = %v, want %v", cur, tt.width, tt.height, tt.freq, got, tt.want)
 			}
 		})
 	}

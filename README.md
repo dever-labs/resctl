@@ -135,7 +135,7 @@ resctl uninstall
 ```
 resctl list                    List all supported resolutions (current marked with *)
 resctl get                     Show the current resolution
-resctl set <WxH[@Hz]>          Change resolution
+resctl set <WxH[@Hz]> [--force]  Change resolution (skips the change if already active, unless --force)
 resctl toggle [res1 res2 ...]  Cycle between resolutions
 resctl install                 Copy binary to ~/bin and add to PATH
 resctl uninstall               Remove binary from ~/bin
@@ -158,6 +158,12 @@ resctl set 1920x1080
 
 # Switch to 1440p at 144 Hz explicitly
 resctl set 2560x1440@144
+
+# No-op: already at 1920x1080, prints "Already at 1920x1080 @ 60Hz" and exits
+resctl set 1920x1080
+
+# Reapply the same resolution anyway (e.g. to force a mode re-negotiation)
+resctl set 1920x1080 --force
 
 # Set up a two-resolution toggle and switch immediately
 resctl toggle 1920x1080 2560x1440

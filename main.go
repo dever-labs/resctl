@@ -16,7 +16,7 @@ const usage = `resctl - display resolution manager
 Usage:
   resctl list [--json] [--display <name>]           List available resolutions
   resctl get [--json] [--display <name>]            Show current resolution
-  resctl set <WxH[@Hz]> [--display <name>]          Set resolution
+  resctl set <WxH[@Hz]> [--display <name>] [--force] Set resolution
   resctl toggle [res1 res2 ...] [--display <name>]  Toggle between resolutions
   resctl install                 Copy to ~/bin and add to PATH
   resctl uninstall               Remove from ~/bin
@@ -30,10 +30,13 @@ Flags:
                       Linux: output name (e.g. DP-1, HDMI-1)
                       Windows: device name (e.g. \\.\DISPLAY1)
                       macOS: 1-based index (e.g. 1, 2)
+  --force             Apply the change even if already at the target
+                      resolution (set only).
 
 Examples:
   resctl set 1920x1080
   resctl set 2560x1440@144
+  resctl set 1920x1080 --force                  # reapply even if already active
   resctl set 2560x1440@144 --display DP-1       # Linux
   resctl set 2560x1440@144 --display \\.\DISPLAY2  # Windows
   resctl set 2560x1440@144 --display 2          # macOS
@@ -52,7 +55,7 @@ func main() {
 	cmd := strings.ToLower(os.Args[1])
 	args := os.Args[2:]
 
-	args, jsonOut, display, err := parseCommandFlags(args)
+	args, jsonOut, display, force, err := parseCommandFlags(args)
 	if err != nil {
 		fatalf("%v\n\n%s", err, usage)
 	}
@@ -66,7 +69,7 @@ func main() {
 		if len(args) == 0 {
 			fatalf("set requires a resolution argument\n\n%s", usage)
 		}
-		err = cmdSet(args[0], display)
+		err = cmdSet(args[0], display, force)
 	case "toggle":
 		err = cmdToggle(args, display)
 	case "install":
@@ -91,29 +94,31 @@ func fatalf(format string, a ...any) {
 	os.Exit(1)
 }
 
-func parseCommandFlags(args []string) (filtered []string, jsonOut bool, display string, err error) {
+func parseCommandFlags(args []string) (filtered []string, jsonOut bool, display string, force bool, err error) {
 	filtered = make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
 		case arg == "--json":
 			jsonOut = true
+		case arg == "--force":
+			force = true
 		case arg == "--display":
 			i++
 			if i >= len(args) {
-				return nil, false, "", fmt.Errorf("--display requires a value")
+				return nil, false, "", false, fmt.Errorf("--display requires a value")
 			}
 			display = args[i]
 		case strings.HasPrefix(arg, "--display="):
 			display = strings.TrimPrefix(arg, "--display=")
 			if display == "" {
-				return nil, false, "", fmt.Errorf("--display requires a value")
+				return nil, false, "", false, fmt.Errorf("--display requires a value")
 			}
 		default:
 			filtered = append(filtered, arg)
 		}
 	}
-	return filtered, jsonOut, display, nil
+	return filtered, jsonOut, display, force, nil
 }
 
 func cmdList(jsonOut bool, display string) error {
@@ -156,17 +161,36 @@ func printJSON(v any) error {
 	return enc.Encode(v)
 }
 
-func cmdSet(arg, display string) error {
+func cmdSet(arg, display string, force bool) error {
 	width, height, freq, err := parseResolution(arg)
 	if err != nil {
 		return err
 	}
+
+	if !force {
+		if cur, curErr := GetCurrent(display); curErr == nil && isNoOp(cur, width, height, freq) {
+			fmt.Printf("Already at %dx%d @ %dHz\n", cur.Width, cur.Height, cur.Freq)
+			return nil
+		}
+	}
+
 	res, err := SetResolution(width, height, freq, display)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Set: %dx%d @ %dHz\n", res.Width, res.Height, res.Freq)
 	return nil
+}
+
+// isNoOp reports whether applying width/height/freq would have no visible
+// effect given the display's current resolution cur. When freq is 0
+// (unspecified by the user), only width and height are compared, since the
+// current refresh rate will be preserved anyway.
+func isNoOp(cur Resolution, width, height, freq uint32) bool {
+	if cur.Width != width || cur.Height != height {
+		return false
+	}
+	return freq == 0 || cur.Freq == freq
 }
 
 func cmdToggle(args []string, display string) error {
