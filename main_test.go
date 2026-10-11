@@ -254,6 +254,45 @@ func TestIsNoOp(t *testing.T) {
 	}
 }
 
+func TestGroupModesByResolution(t *testing.T) {
+	modes := []Resolution{
+		{Width: 1920, Height: 1080, Freq: 50},
+		{Width: 1920, Height: 1080, Freq: 60},
+		{Width: 2560, Height: 1440, Freq: 60},
+		{Width: 2560, Height: 1440, Freq: 120},
+		{Width: 2560, Height: 1440, Freq: 144},
+	}
+
+	want := []modeGroup{
+		{Width: 1920, Height: 1080, Freqs: []uint32{50, 60}},
+		{Width: 2560, Height: 1440, Freqs: []uint32{60, 120, 144}},
+	}
+
+	got := groupModesByResolution(modes)
+	if len(got) != len(want) {
+		t.Fatalf("groupModesByResolution() returned %d groups, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i].Width != want[i].Width || got[i].Height != want[i].Height {
+			t.Fatalf("group[%d] = %dx%d, want %dx%d", i, got[i].Width, got[i].Height, want[i].Width, want[i].Height)
+		}
+		if len(got[i].Freqs) != len(want[i].Freqs) {
+			t.Fatalf("group[%d].Freqs = %v, want %v", i, got[i].Freqs, want[i].Freqs)
+		}
+		for j := range want[i].Freqs {
+			if got[i].Freqs[j] != want[i].Freqs[j] {
+				t.Errorf("group[%d].Freqs[%d] = %d, want %d", i, j, got[i].Freqs[j], want[i].Freqs[j])
+			}
+		}
+	}
+}
+
+func TestGroupModesByResolution_Empty(t *testing.T) {
+	if got := groupModesByResolution(nil); len(got) != 0 {
+		t.Errorf("groupModesByResolution(nil) = %+v, want empty", got)
+	}
+}
+
 // withTempConfigDir redirects every platform's config-directory lookup
 // (Linux's XDG_CONFIG_HOME, Darwin's $HOME, Windows' %APPDATA%) at a fresh
 // temp dir, so loadState/saveState/clearState tests don't touch the real
