@@ -18,6 +18,8 @@ Usage:
   resctl get [--json] [--display <name>]            Show current resolution
   resctl set <WxH[@Hz]> [--display <name>] [--force] Set resolution
   resctl toggle [res1 res2 ...] [--display <name>]  Toggle between resolutions
+  resctl toggle --list [--display <name>]           Show the saved toggle list
+  resctl toggle --clear [--display <name>]          Delete the saved toggle list
   resctl install                 Copy to ~/bin and add to PATH
   resctl uninstall               Remove from ~/bin
   resctl version                 Print version
@@ -32,6 +34,9 @@ Flags:
                       macOS: 1-based index (e.g. 1, 2)
   --force             Apply the change even if already at the target
                       resolution (set only).
+  --list              Show the saved toggle list and current position
+                      (toggle only).
+  --clear             Delete the saved toggle list (toggle only).
 
 Examples:
   resctl set 1920x1080
@@ -42,6 +47,8 @@ Examples:
   resctl set 2560x1440@144 --display 2          # macOS
   resctl toggle 1920x1080 2560x1440    # set list + switch immediately
   resctl toggle                        # cycle to next in saved list
+  resctl toggle --list                 # show the saved list + current index
+  resctl toggle --clear                # delete the saved list
   resctl get --json
   resctl list --json
 `
@@ -55,23 +62,23 @@ func main() {
 	cmd := strings.ToLower(os.Args[1])
 	args := os.Args[2:]
 
-	args, jsonOut, display, force, err := parseCommandFlags(args)
+	args, flags, err := parseCommandFlags(args)
 	if err != nil {
 		fatalf("%v\n\n%s", err, usage)
 	}
 
 	switch cmd {
 	case "list":
-		err = cmdList(jsonOut, display)
+		err = cmdList(flags.JSON, flags.Display)
 	case "get":
-		err = cmdGet(jsonOut, display)
+		err = cmdGet(flags.JSON, flags.Display)
 	case "set":
 		if len(args) == 0 {
 			fatalf("set requires a resolution argument\n\n%s", usage)
 		}
-		err = cmdSet(args[0], display, force)
+		err = cmdSet(args[0], flags.Display, flags.Force)
 	case "toggle":
-		err = cmdToggle(args, display)
+		err = cmdToggle(args, flags.Display, flags.List, flags.Clear)
 	case "install":
 		err = install()
 	case "uninstall":
@@ -94,31 +101,49 @@ func fatalf(format string, a ...any) {
 	os.Exit(1)
 }
 
-func parseCommandFlags(args []string) (filtered []string, jsonOut bool, display string, force bool, err error) {
+// commandFlags holds the global flags shared across subcommands. Not every
+// flag is meaningful for every command (e.g. --force only applies to set);
+// unused flags are simply ignored by the commands that don't consume them.
+type commandFlags struct {
+	JSON    bool
+	Display string
+	Force   bool
+	List    bool
+	Clear   bool
+}
+
+func parseCommandFlags(args []string) (filtered []string, flags commandFlags, err error) {
 	filtered = make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
 		case arg == "--json":
-			jsonOut = true
+			flags.JSON = true
 		case arg == "--force":
-			force = true
+			flags.Force = true
+		case arg == "--list":
+			flags.List = true
+		case arg == "--clear":
+			flags.Clear = true
 		case arg == "--display":
 			i++
 			if i >= len(args) {
-				return nil, false, "", false, fmt.Errorf("--display requires a value")
+				return nil, commandFlags{}, fmt.Errorf("--display requires a value")
 			}
-			display = args[i]
+			flags.Display = args[i]
 		case strings.HasPrefix(arg, "--display="):
-			display = strings.TrimPrefix(arg, "--display=")
-			if display == "" {
-				return nil, false, "", false, fmt.Errorf("--display requires a value")
+			flags.Display = strings.TrimPrefix(arg, "--display=")
+			if flags.Display == "" {
+				return nil, commandFlags{}, fmt.Errorf("--display requires a value")
 			}
 		default:
 			filtered = append(filtered, arg)
 		}
 	}
-	return filtered, jsonOut, display, force, nil
+	if flags.List && flags.Clear {
+		return nil, commandFlags{}, fmt.Errorf("--list and --clear cannot be used together")
+	}
+	return filtered, flags, nil
 }
 
 func cmdList(jsonOut bool, display string) error {
@@ -193,7 +218,17 @@ func isNoOp(cur Resolution, width, height, freq uint32) bool {
 	return freq == 0 || cur.Freq == freq
 }
 
-func cmdToggle(args []string, display string) error {
+func cmdToggle(args []string, display string, list, clear bool) error {
+	if (list || clear) && len(args) > 0 {
+		return fmt.Errorf("--list/--clear cannot be combined with resolution arguments")
+	}
+	if clear {
+		return clearToggleList(display)
+	}
+	if list {
+		return printToggleList(display)
+	}
+
 	var state ToggleState
 
 	if len(args) > 0 {
@@ -236,6 +271,50 @@ func cmdToggle(args []string, display string) error {
 
 	fmt.Printf("Toggled to: %dx%d @ %dHz\n", res.Width, res.Height, res.Freq)
 	return nil
+}
+
+// printToggleList prints the saved toggle list and marks the entry at the
+// current index. A missing state file means no list is configured yet; any
+// other error (corrupt file, permission denied, etc.) is surfaced rather
+// than silently treated the same way.
+func printToggleList(display string) error {
+	state, err := loadState(display)
+	switch {
+	case os.IsNotExist(err):
+		fmt.Println("No toggle list configured — run: resctl toggle <res1> <res2>")
+		return nil
+	case err != nil:
+		return fmt.Errorf("could not read toggle list: %w", err)
+	}
+	if len(state.Resolutions) == 0 {
+		fmt.Println("No toggle list configured — run: resctl toggle <res1> <res2>")
+		return nil
+	}
+
+	fmt.Println("Toggle list:")
+	for i, r := range state.Resolutions {
+		marker := ""
+		if i == state.CurrentIndex {
+			marker = "  ← current"
+		}
+		fmt.Printf("  [%d] %s%s\n", i, r, marker)
+	}
+	return nil
+}
+
+// clearToggleList deletes the saved toggle list, if any.
+func clearToggleList(display string) error {
+	err := clearState(display)
+	switch {
+	case err == nil:
+		fmt.Println("Toggle list cleared")
+		return nil
+	case os.IsNotExist(err):
+		fmt.Println("No toggle list to clear")
+		return nil
+	default:
+		return err
+	}
 }
 
 // parseResolution parses "WxH", "WxH@Hz", or "WxH@HzHz" into numeric parts.

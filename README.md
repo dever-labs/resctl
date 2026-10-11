@@ -137,6 +137,8 @@ resctl list                    List all supported resolutions (current marked wi
 resctl get                     Show the current resolution
 resctl set <WxH[@Hz]> [--force]  Change resolution (skips the change if already active, unless --force)
 resctl toggle [res1 res2 ...]  Cycle between resolutions
+resctl toggle --list           Show the saved toggle list and current position
+resctl toggle --clear          Delete the saved toggle list
 resctl install                 Copy binary to ~/bin and add to PATH
 resctl uninstall               Remove binary from ~/bin
 resctl version                 Print the installed version
@@ -170,6 +172,15 @@ resctl toggle 1920x1080 2560x1440
 
 # After that, each call to `toggle` cycles to the next entry
 resctl toggle
+
+# Inspect the saved toggle list and current position
+resctl toggle --list
+# Toggle list:
+#   [0] 1920x1080
+#   [1] 2560x1440  ← current
+
+# Delete the saved toggle list
+resctl toggle --clear
 ```
 
 **Toggle state** is saved and persists across reboots:
