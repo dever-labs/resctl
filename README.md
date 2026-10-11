@@ -188,7 +188,7 @@ The easiest way to get started is with the included **Dev Container** — open t
 
 ### Requirements (without Dev Container)
 
-- Go 1.20+
+- Go 1.26+
 - **Windows build:** `goversioninfo` (`go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`)
 - **Linux build:** `xrandr` for smoke-testing
 - **macOS build:** Xcode Command Line Tools for cgo and CoreGraphics
