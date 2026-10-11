@@ -158,14 +158,40 @@ func cmdList(jsonOut bool, display string) error {
 
 	cur, _ := GetCurrent(display)
 	fmt.Println("Available resolutions:")
-	for _, m := range modes {
-		active := "  "
-		if m.Width == cur.Width && m.Height == cur.Height && m.Freq == cur.Freq {
-			active = "* "
+	for _, g := range groupModesByResolution(modes) {
+		fmt.Printf("  %dx%d: ", g.Width, g.Height)
+		for _, f := range g.Freqs {
+			marker := ""
+			if g.Width == cur.Width && g.Height == cur.Height && f == cur.Freq {
+				marker = "*"
+			}
+			fmt.Printf("  %dHz%s", f, marker)
 		}
-		fmt.Printf("  %s%dx%d @ %dHz\n", active, m.Width, m.Height, m.Freq)
+		fmt.Println()
 	}
 	return nil
+}
+
+// modeGroup is a resolution together with the refresh rates available at it.
+type modeGroup struct {
+	Width  uint32
+	Height uint32
+	Freqs  []uint32
+}
+
+// groupModesByResolution groups a mode list by width x height, preserving
+// the input order (ListModes returns modes sorted by width, then height,
+// then freq, so freqs within each group come out sorted too).
+func groupModesByResolution(modes []Resolution) []modeGroup {
+	var groups []modeGroup
+	for _, m := range modes {
+		if n := len(groups); n > 0 && groups[n-1].Width == m.Width && groups[n-1].Height == m.Height {
+			groups[n-1].Freqs = append(groups[n-1].Freqs, m.Freq)
+			continue
+		}
+		groups = append(groups, modeGroup{Width: m.Width, Height: m.Height, Freqs: []uint32{m.Freq}})
+	}
+	return groups
 }
 
 func cmdGet(jsonOut bool, display string) error {
