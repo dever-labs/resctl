@@ -219,6 +219,9 @@ func isNoOp(cur Resolution, width, height, freq uint32) bool {
 }
 
 func cmdToggle(args []string, display string, list, clear bool) error {
+	if (list || clear) && len(args) > 0 {
+		return fmt.Errorf("--list/--clear cannot be combined with resolution arguments")
+	}
 	if clear {
 		return clearToggleList(display)
 	}
@@ -271,10 +274,19 @@ func cmdToggle(args []string, display string, list, clear bool) error {
 }
 
 // printToggleList prints the saved toggle list and marks the entry at the
-// current index.
+// current index. A missing state file means no list is configured yet; any
+// other error (corrupt file, permission denied, etc.) is surfaced rather
+// than silently treated the same way.
 func printToggleList(display string) error {
 	state, err := loadState(display)
-	if err != nil || len(state.Resolutions) == 0 {
+	switch {
+	case os.IsNotExist(err):
+		fmt.Println("No toggle list configured — run: resctl toggle <res1> <res2>")
+		return nil
+	case err != nil:
+		return fmt.Errorf("could not read toggle list: %w", err)
+	}
+	if len(state.Resolutions) == 0 {
 		fmt.Println("No toggle list configured — run: resctl toggle <res1> <res2>")
 		return nil
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -339,5 +340,36 @@ func TestClearToggleList_WithSavedState(t *testing.T) {
 
 	if _, err := loadState(""); err == nil {
 		t.Error("loadState after clear: expected error, got nil")
+	}
+}
+
+func TestPrintToggleList_CorruptState(t *testing.T) {
+	withTempConfigDir(t)
+
+	path := stateFile("")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("not json"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	err := printToggleList("")
+	if err == nil {
+		t.Fatal("printToggleList with corrupt state: expected error, got nil")
+	}
+	if strings.Contains(err.Error(), "No toggle list configured") {
+		t.Errorf("corrupt state should not be reported as \"no toggle list configured\": %v", err)
+	}
+}
+
+func TestCmdToggle_ListOrClearWithResolutionArgs(t *testing.T) {
+	withTempConfigDir(t)
+
+	if err := cmdToggle([]string{"1920x1080"}, "", true, false); err == nil {
+		t.Error("cmdToggle with --list and resolution args: expected error, got nil")
+	}
+	if err := cmdToggle([]string{"1920x1080"}, "", false, true); err == nil {
+		t.Error("cmdToggle with --clear and resolution args: expected error, got nil")
 	}
 }
