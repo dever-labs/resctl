@@ -1,3 +1,3 @@
 module github.com/dever-labs/resctl
 
-go 1.20
+go 1.26
