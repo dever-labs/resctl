@@ -55,7 +55,7 @@ cd resctl
 ### Linux
 
 > **X11 requires** `xrandr` (`x11-xserver-utils` on Debian/Ubuntu, `xorg-xrandr` on Arch).  
-> **Wayland** works out of the box — the binary speaks the `zwlr-output-management-unstable-v1` protocol directly. No extra packages needed. Requires a compositor that implements that protocol (e.g. sway, wayfire, labwc, or any wlroots-based compositor).
+> **Wayland** works out of the box — the binary speaks the `zwlr-output-management-unstable-v1` protocol directly. No extra packages needed. Requires a compositor that implements that protocol (e.g. sway, wayfire, labwc, or any wlroots-based compositor). **GNOME (Mutter) and KDE (KWin) do not implement this protocol** — `resctl` detects this and tells you to use `gnome-randr`/Settings on GNOME, `kscreen-doctor` on KDE, or an `xrandr`-based tool via XWayland elsewhere.
 
 #### Option 1 — Download a release (recommended)
 

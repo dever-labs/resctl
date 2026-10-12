@@ -25,7 +25,9 @@ func TestCompositorHint(t *testing.T) {
 		{"", "plasma", "kscreen-doctor"}, // via DESKTOP_SESSION fallback
 		{"sway", "", "wlroots"},
 		{"Hyprland", "", "wlroots"},
-		{"", "", "wlroots"}, // unknown → generic message
+		{"", "", "wlroots"},       // unknown → generic message
+		{"", "", "xrandr"},        // unknown → suggests XWayland fallback
+		{"unity", "", "xwayland"}, // non-GNOME/KDE desktop → generic message
 	}
 
 	for _, tt := range tests {
