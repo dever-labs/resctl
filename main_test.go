@@ -548,3 +548,51 @@ func TestWriteFileAtomic_OverwritesExisting(t *testing.T) {
 		t.Errorf("content = %q, want %q", data, "new")
 	}
 }
+
+// --- confirm ---
+
+func withStdin(t *testing.T, input string, fn func()) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = orig }()
+
+	go func() {
+		_, _ = w.WriteString(input)
+		_ = w.Close()
+	}()
+
+	fn()
+}
+
+func TestConfirm(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"lowercase y", "y\n", true},
+		{"yes", "yes\n", true},
+		{"uppercase Y", "Y\n", true},
+		{"no", "n\n", false},
+		{"empty line", "\n", false},
+		{"garbage", "sure\n", false},
+		{"EOF, no input", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got bool
+			withStdin(t, tt.input, func() {
+				got = confirm("Proceed?")
+			})
+			if got != tt.want {
+				t.Errorf("confirm() with input %q = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}

@@ -122,3 +122,33 @@ func TestAddToShellPath_Idempotent(t *testing.T) {
 		})
 	}
 }
+
+func TestUninstall_NotInstalled(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if err := uninstall(false); err != nil {
+		t.Fatalf("uninstall() with nothing installed: %v", err)
+	}
+}
+
+func TestUninstall_Force(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dest := filepath.Join(installDir(), "resctl")
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(dest, []byte("fake binary"), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// force=true must remove the file without prompting (no stdin needed).
+	if err := uninstall(true); err != nil {
+		t.Fatalf("uninstall(true): %v", err)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Errorf("expected %s to be removed, stat err = %v", dest, err)
+	}
+}
