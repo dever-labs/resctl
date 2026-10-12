@@ -63,7 +63,7 @@ func saveState(state ToggleState, display string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(stateFile(display), data, 0o644)
+	return writeFileAtomic(stateFile(display), data, 0o644)
 }
 
 // clearState deletes the saved toggle state file, if any. Returns an error

@@ -438,3 +438,51 @@ func TestCheckDisplayExists_NotFound(t *testing.T) {
 		t.Errorf("error = %q, want it to list available display names", err.Error())
 	}
 }
+
+// --- writeFileAtomic ---
+
+func TestWriteFileAtomic_CreatesFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+
+	if err := writeFileAtomic(path, []byte(`{"a":1}`), 0o644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != `{"a":1}` {
+		t.Errorf("content = %q, want %q", data, `{"a":1}`)
+	}
+
+	// No leftover temp files should remain in the directory.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "state.json" {
+		t.Errorf("dir entries = %v, want only state.json", entries)
+	}
+}
+
+func TestWriteFileAtomic_OverwritesExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := writeFileAtomic(path, []byte("new"), 0o644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "new" {
+		t.Errorf("content = %q, want %q", data, "new")
+	}
+}
