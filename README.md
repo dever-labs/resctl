@@ -142,6 +142,7 @@ resctl toggle --list           Show the saved toggle list and current position
 resctl toggle --clear          Delete the saved toggle list
 resctl install                 Copy binary to ~/bin and add to PATH
 resctl uninstall [--force]     Remove binary from ~/bin (prompts for confirmation)
+resctl completion <shell>      Print a completion script (bash, zsh, fish)
 resctl version                 Print the installed version
 ```
 
@@ -188,6 +189,11 @@ resctl displays
 # Connected displays:
 #   DP-1: 2560x1440 @ 144Hz
 #   HDMI-1: 1920x1080 @ 60Hz
+
+# Enable shell completion
+resctl completion bash > /etc/bash_completion.d/resctl
+resctl completion zsh > "${fpath[1]}/_resctl"
+resctl completion fish > ~/.config/fish/completions/resctl.fish
 ```
 
 **Toggle state** is saved and persists across reboots:
