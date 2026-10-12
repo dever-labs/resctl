@@ -268,6 +268,29 @@ $env:VERSION = "v1.0.0"
 .\build.ps1
 ```
 
+### Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit conventions, and the local verification checklist expected before opening a PR.
+
+---
+
+## Troubleshooting
+
+**`xrandr: command not found` / `xrandr query failed`**
+`resctl` shells out to `xrandr` on X11. Install it: `sudo apt install x11-xserver-utils` (Debian/Ubuntu) or `sudo pacman -S xorg-xrandr` (Arch). This error can also appear if you're actually in a Wayland session but `xrandr` (XWayland-aware) still fails — check `echo $XDG_SESSION_TYPE` / `echo $WAYLAND_DISPLAY`.
+
+**`zwlr_output_manager_v1 not available` on GNOME or KDE**
+GNOME (Mutter) and KDE (KWin) don't implement the `zwlr-output-management` protocol that `resctl` uses natively on Wayland. Use `gnome-randr` or Settings → Displays on GNOME, or `kscreen-doctor` on KDE. On other desktops, the error message suggests trying an `xrandr`-based tool via XWayland. See [#7](https://github.com/dever-labs/resctl/issues/7) for background.
+
+**`cannot connect to Wayland socket` / `XDG_RUNTIME_DIR is not set`**
+`resctl` needs `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY` set, which is normally done automatically by your session manager. This usually means you're running `resctl` from a context without a graphical session attached (e.g. an SSH session, a `sudo`-elevated shell that dropped the environment, or a `cron` job) — run it from within your graphical session instead.
+
+**`resctl install` updated PATH but `resctl` still isn't found**
+Restart your terminal (or re-source your shell rc file, e.g. `source ~/.bashrc`) — PATH changes only take effect in new shell sessions. If that doesn't help, check that your `SHELL` environment variable actually points at your real shell (`echo $SHELL`); `resctl install` picks the rc file to edit based on it, and an unusual/misconfigured `SHELL` can cause it to fall back to `~/.profile` instead of `~/.bashrc`/`~/.zshrc`/`~/.config/fish/config.fish`.
+
+**`display "X" not found` when using `--display`**
+Display names are platform-specific (e.g. `DP-1`, `HDMI-1` on Linux; a numeric index on Windows/macOS). Run `resctl list` without `--display` first to see the primary display's modes, or check your compositor/X11 output name directly (`xrandr --query` on X11, or your Wayland compositor's own tooling).
+
 ---
 
 ## License
