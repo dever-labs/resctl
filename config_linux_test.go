@@ -142,3 +142,45 @@ func TestSaveState_CreatesConfigDir(t *testing.T) {
 		t.Fatal("expected resctl config path to be a directory")
 	}
 }
+
+// TestSaveState_SetsCurrentVersion verifies saveState always stamps the
+// state with the current schema version, regardless of what was passed in.
+func TestSaveState_SetsCurrentVersion(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	if err := saveState(ToggleState{Resolutions: []string{"1920x1080"}}, ""); err != nil {
+		t.Fatalf("saveState: %v", err)
+	}
+
+	got, err := loadState("")
+	if err != nil {
+		t.Fatalf("loadState: %v", err)
+	}
+	if got.Version != currentStateVersion {
+		t.Errorf("Version = %d, want %d", got.Version, currentStateVersion)
+	}
+}
+
+// TestLoadState_MigratesMissingVersion verifies that state files written
+// before the version field existed (Version == 0 / absent from the JSON)
+// are treated as v1 rather than left at 0.
+func TestLoadState_MigratesMissingVersion(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+
+	if err := os.MkdirAll(filepath.Join(base, "resctl"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	legacy := `{"resolutions":["1920x1080"],"currentIndex":0}`
+	if err := os.WriteFile(stateFile(""), []byte(legacy), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := loadState("")
+	if err != nil {
+		t.Fatalf("loadState: %v", err)
+	}
+	if got.Version != 1 {
+		t.Errorf("Version = %d, want 1 for a pre-versioning state file", got.Version)
+	}
+}

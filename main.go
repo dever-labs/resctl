@@ -12,6 +12,12 @@ import (
 // version is overridden at link time via -ldflags="-X main.version=vX.Y.Z".
 var version = "dev"
 
+// currentStateVersion is the schema version written to new/updated
+// state.json files by saveState(). Bump this and add migration logic in
+// loadState() whenever ToggleState's JSON shape changes in a
+// backwards-incompatible way.
+const currentStateVersion = 1
+
 const usage = `resctl - display resolution manager
 
 Usage:
