@@ -16,6 +16,8 @@ const (
 
 	CDS_UPDATEREGISTRY = 0x00000001
 
+	DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x00000001
+
 	DISP_CHANGE_SUCCESSFUL = 0
 	DISP_CHANGE_RESTART    = 1
 	DISP_CHANGE_FAILED     = -1
@@ -101,6 +103,13 @@ type Resolution struct {
 
 func (r Resolution) String() string {
 	return fmt.Sprintf("%dx%d@%dHz", r.Width, r.Height, r.Freq)
+}
+
+// DisplayInfo identifies a connected display and its current resolution,
+// as returned by ListDisplays.
+type DisplayInfo struct {
+	Name    string     `json:"name"`
+	Current Resolution `json:"current"`
 }
 
 func displayDeviceName(display string) (*uint16, error) {
@@ -212,6 +221,40 @@ func ListModes(display string) ([]Resolution, error) {
 	})
 
 	return modes, nil
+}
+
+// ListDisplays returns every display attached to the desktop, with its
+// current resolution.
+func ListDisplays() ([]DisplayInfo, error) {
+	var displays []DisplayInfo
+	for i := uint32(0); ; i++ {
+		var dd DISPLAY_DEVICE
+		dd.Cb = uint32(unsafe.Sizeof(dd))
+		ret, _, _ := procEnumDisplayDevicesW.Call(
+			0,
+			uintptr(i),
+			uintptr(unsafe.Pointer(&dd)),
+			0,
+		)
+		if ret == 0 {
+			break
+		}
+		if dd.StateFlags&DISPLAY_DEVICE_ATTACHED_TO_DESKTOP == 0 {
+			continue
+		}
+
+		name := syscall.UTF16ToString(dd.DeviceName[:])
+		cur, err := GetCurrent(name)
+		if err != nil {
+			continue // skip devices we can't query rather than failing the whole list
+		}
+		displays = append(displays, DisplayInfo{Name: name, Current: cur})
+	}
+
+	if len(displays) == 0 {
+		return nil, fmt.Errorf("no active displays found")
+	}
+	return displays, nil
 }
 
 // SetResolution changes the selected display resolution.

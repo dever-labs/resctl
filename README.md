@@ -181,6 +181,12 @@ resctl toggle --list
 
 # Delete the saved toggle list
 resctl toggle --clear
+
+# List all connected displays and their current resolution
+resctl displays
+# Connected displays:
+#   DP-1: 2560x1440 @ 144Hz
+#   HDMI-1: 1920x1080 @ 60Hz
 ```
 
 **Toggle state** is saved and persists across reboots:

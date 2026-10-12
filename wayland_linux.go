@@ -572,6 +572,50 @@ func wlrNativeQuery(display string) (modes []Resolution, current Resolution, out
 	return modes, current, outputName, nil
 }
 
+// wlrNativeListDisplays connects to the Wayland socket and returns every
+// enabled output with its current resolution.
+func wlrNativeListDisplays() ([]DisplayInfo, error) {
+	c, err := wlrDial()
+	if err != nil {
+		return nil, err
+	}
+	defer c.close()
+
+	if err = c.sendGetRegistry(); err != nil {
+		return nil, err
+	}
+	if err = c.roundTrip(); err != nil {
+		return nil, err
+	}
+	if c.managerID == 0 {
+		return nil, fmt.Errorf("zwlr_output_manager_v1 not available — %s", compositorHint())
+	}
+	if err = c.roundTrip(); err != nil {
+		return nil, err
+	}
+
+	var displays []DisplayInfo
+	for _, id := range c.headOrder {
+		head := c.heads[id]
+		if head == nil || head.finished || !head.enabled {
+			continue
+		}
+		var current Resolution
+		for _, m := range head.modes {
+			if m.id == head.currentMode {
+				current = Resolution{Width: uint32(m.width), Height: uint32(m.height), Freq: m.refreshHz}
+				break
+			}
+		}
+		displays = append(displays, DisplayInfo{Name: head.name, Current: current})
+	}
+
+	if len(displays) == 0 {
+		return nil, fmt.Errorf("no enabled display found")
+	}
+	return displays, nil
+}
+
 // wlrNativeSet applies a new display mode via the zwlr-output-management protocol.
 func wlrNativeSet(width, height, freq uint32, display string) (Resolution, error) {
 	c, err := wlrDial()

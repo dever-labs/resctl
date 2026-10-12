@@ -74,6 +74,13 @@ func (r Resolution) String() string {
 	return fmt.Sprintf("%dx%d@%dHz", r.Width, r.Height, r.Freq)
 }
 
+// DisplayInfo identifies a connected display and its current resolution,
+// as returned by ListDisplays.
+type DisplayInfo struct {
+	Name    string     `json:"name"`
+	Current Resolution `json:"current"`
+}
+
 func resolveDisplayID(display string) (C.CGDirectDisplayID, error) {
 	if display == "" {
 		return C.CGMainDisplayID(), nil
@@ -166,6 +173,32 @@ func ListModes(display string) ([]Resolution, error) {
 	})
 
 	return modes, nil
+}
+
+// ListDisplays returns every active display, identified by its 1-based
+// index (the same identifier accepted by --display), with its current
+// resolution.
+func ListDisplays() ([]DisplayInfo, error) {
+	var ids [32]C.CGDirectDisplayID
+	count := int(C.resctl_active_displays(&ids[0], C.uint32_t(len(ids))))
+	if count == 0 {
+		return nil, fmt.Errorf("could not enumerate active displays")
+	}
+
+	var displays []DisplayInfo
+	for i := 0; i < count; i++ {
+		name := strconv.Itoa(i + 1)
+		cur, err := GetCurrent(name)
+		if err != nil {
+			continue // skip displays we can't query rather than failing the whole list
+		}
+		displays = append(displays, DisplayInfo{Name: name, Current: cur})
+	}
+
+	if len(displays) == 0 {
+		return nil, fmt.Errorf("no active displays found")
+	}
+	return displays, nil
 }
 
 // SetResolution changes the selected display resolution.
