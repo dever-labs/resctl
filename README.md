@@ -13,7 +13,7 @@ A minimal, single-binary CLI for changing display resolution. No dependencies, n
 | Linux amd64 (X11) | ✅ via xrandr |
 | Linux amd64 (Wayland) | ✅ via zwlr-output-management protocol |
 | Linux arm64 (X11 + Wayland) | ✅ Raspberry Pi 4/5, Asahi Linux, ARM VMs |
-| macOS | ✅ via CoreGraphics |
+| macOS (Intel + Apple Silicon) | ✅ via CoreGraphics — universal binary |
 
 ---
 
@@ -93,7 +93,7 @@ go build -ldflags="-s -w" -o resctl .
 
 #### Option 1 — Download a release (recommended)
 
-1. Grab `resctl-macos` from the [latest release](https://github.com/dever-labs/resctl/releases/latest).
+1. Grab `resctl-macos` from the [latest release](https://github.com/dever-labs/resctl/releases/latest). It's a universal binary (runs natively on both Intel and Apple Silicon Macs).
 2. Optionally verify the download against `checksums.txt` (also in the release assets):
 
    ```sh
@@ -271,6 +271,15 @@ go test ./...
 # macOS
 go test ./...
 ```
+
+Unit test coverage focuses on pure/parsing logic (resolution parsing, xrandr output parsing, toggle-list state handling, JSON output, flag parsing, shell-completion script generation). Code that calls into platform display APIs directly (`xrandr`, the Wayland compositor protocol, Win32, CoreGraphics) isn't exercised by unit tests — it's verified on every PR by CI running the full build, vet, lint, and test suite natively on `windows-2025-vs2026`, `ubuntu-latest`, and `macos-latest` runners.
+
+### Versioning
+
+`resctl` follows [Semantic Versioning](https://semver.org/). As of 1.0.0:
+- The CLI's commands, flags, and output formats (including `--json` schemas) are considered a stable public interface — breaking changes to them will only ship in a new major version.
+- The `state.json` schema is versioned (see the `version` field) so future changes can migrate existing files forward instead of breaking them.
+- Pre-1.0.0 releases (`0.x.y`) did not carry this guarantee.
 
 ### Release
 
