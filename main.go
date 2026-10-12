@@ -337,6 +337,36 @@ func isNoOp(cur Resolution, width, height, freq uint32) bool {
 	return freq == 0 || cur.Freq == freq
 }
 
+// resolutionExistsInModes reports whether resStr (in the same format
+// accepted by parseResolution, e.g. "1920x1080" or "1920x1080@144")
+// matches any mode in modes. When resStr has no explicit refresh rate,
+// any mode with a matching width/height counts as a match.
+func resolutionExistsInModes(resStr string, modes []Resolution) bool {
+	width, height, freq, err := parseResolution(resStr)
+	if err != nil {
+		return false
+	}
+	for _, m := range modes {
+		if m.Width == width && m.Height == height && (freq == 0 || m.Freq == freq) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterValidResolutions splits resolutions into the subset that matches at
+// least one of modes (valid) and the rest (dropped), preserving order.
+func filterValidResolutions(resolutions []string, modes []Resolution) (valid, dropped []string) {
+	for _, r := range resolutions {
+		if resolutionExistsInModes(r, modes) {
+			valid = append(valid, r)
+		} else {
+			dropped = append(dropped, r)
+		}
+	}
+	return valid, dropped
+}
+
 func cmdToggle(args []string, display string, list, clear bool) error {
 	if (list || clear) && len(args) > 0 {
 		return fmt.Errorf("--list/--clear cannot be combined with resolution arguments")
@@ -368,6 +398,26 @@ func cmdToggle(args []string, display string, list, clear bool) error {
 		state, loadErr = loadState(display)
 		if loadErr != nil || len(state.Resolutions) == 0 {
 			return fmt.Errorf("no toggle list configured — run: resctl toggle <res1> <res2>")
+		}
+
+		// The saved list may contain resolutions that no longer exist on
+		// this display (e.g. after switching monitors or GPUs). Drop them
+		// rather than failing deep inside SetResolution with a confusing
+		// error. If ListModes itself fails, skip this check and let
+		// SetResolution surface its own error, consistent with
+		// validateDisplay's fail-open behavior elsewhere.
+		if modes, modesErr := ListModes(display); modesErr == nil {
+			valid, dropped := filterValidResolutions(state.Resolutions, modes)
+			if len(valid) == 0 {
+				return fmt.Errorf("no entries in the saved toggle list match this display's available resolutions — reconfigure with: resctl toggle <res1> <res2>")
+			}
+			if len(dropped) > 0 {
+				fmt.Fprintf(os.Stderr, "warning: removing unavailable entries from toggle list: %s\n", strings.Join(dropped, ", "))
+				if state.CurrentIndex >= len(valid) {
+					state.CurrentIndex = 0
+				}
+				state.Resolutions = valid
+			}
 		}
 	}
 

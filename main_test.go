@@ -254,6 +254,68 @@ func TestIsNoOp(t *testing.T) {
 	}
 }
 
+func TestResolutionExistsInModes(t *testing.T) {
+	modes := []Resolution{
+		{Width: 1920, Height: 1080, Freq: 60},
+		{Width: 2560, Height: 1440, Freq: 144},
+	}
+
+	tests := []struct {
+		name string
+		res  string
+		want bool
+	}{
+		{"exact match", "1920x1080@60", true},
+		{"width/height match, freq unspecified", "2560x1440", true},
+		{"width/height match, different freq", "1920x1080@144", false},
+		{"no matching mode", "3840x2160", false},
+		{"invalid resolution string", "not-a-resolution", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolutionExistsInModes(tt.res, modes); got != tt.want {
+				t.Errorf("resolutionExistsInModes(%q) = %v, want %v", tt.res, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilterValidResolutions(t *testing.T) {
+	modes := []Resolution{
+		{Width: 1920, Height: 1080, Freq: 60},
+	}
+
+	valid, dropped := filterValidResolutions([]string{"1920x1080", "3840x2160", "1920x1080@60"}, modes)
+
+	wantValid := []string{"1920x1080", "1920x1080@60"}
+	wantDropped := []string{"3840x2160"}
+
+	if len(valid) != len(wantValid) {
+		t.Fatalf("valid = %v, want %v", valid, wantValid)
+	}
+	for i := range wantValid {
+		if valid[i] != wantValid[i] {
+			t.Errorf("valid[%d] = %q, want %q", i, valid[i], wantValid[i])
+		}
+	}
+	if len(dropped) != len(wantDropped) || dropped[0] != wantDropped[0] {
+		t.Errorf("dropped = %v, want %v", dropped, wantDropped)
+	}
+}
+
+func TestFilterValidResolutions_AllDropped(t *testing.T) {
+	modes := []Resolution{{Width: 1920, Height: 1080, Freq: 60}}
+
+	valid, dropped := filterValidResolutions([]string{"3840x2160"}, modes)
+	if len(valid) != 0 {
+		t.Errorf("valid = %v, want empty", valid)
+	}
+	if len(dropped) != 1 || dropped[0] != "3840x2160" {
+		t.Errorf("dropped = %v, want [3840x2160]", dropped)
+	}
+}
+
 func TestGroupModesByResolution(t *testing.T) {
 	modes := []Resolution{
 		{Width: 1920, Height: 1080, Freq: 50},
