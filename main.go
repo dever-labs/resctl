@@ -20,6 +20,7 @@ Usage:
   resctl toggle [res1 res2 ...] [--display <name>]  Toggle between resolutions
   resctl toggle --list [--display <name>]           Show the saved toggle list
   resctl toggle --clear [--display <name>]          Delete the saved toggle list
+  resctl displays [--json]       List connected displays and their current resolution
   resctl install                 Copy to ~/bin and add to PATH
   resctl uninstall               Remove from ~/bin
   resctl version                 Print version
@@ -51,6 +52,8 @@ Examples:
   resctl toggle --clear                # delete the saved list
   resctl get --json
   resctl list --json
+  resctl displays
+  resctl displays --json
 `
 
 func main() {
@@ -68,6 +71,15 @@ func main() {
 	}
 
 	switch cmd {
+	case "list", "get", "set", "toggle":
+		if flags.Display != "" {
+			if verr := validateDisplay(flags.Display); verr != nil {
+				fatalf("%v\n", verr)
+			}
+		}
+	}
+
+	switch cmd {
 	case "list":
 		err = cmdList(flags.JSON, flags.Display)
 	case "get":
@@ -79,6 +91,8 @@ func main() {
 		err = cmdSet(args[0], flags.Display, flags.Force)
 	case "toggle":
 		err = cmdToggle(args, flags.Display, flags.List, flags.Clear)
+	case "displays":
+		err = cmdDisplays(flags.JSON)
 	case "install":
 		err = install()
 	case "uninstall":
@@ -94,6 +108,52 @@ func main() {
 	if err != nil {
 		fatalf("%v\n", err)
 	}
+}
+
+// validateDisplay reports an error if display is non-empty and does not
+// match any currently connected display, listing the available names to
+// help the user correct a typo. If displays can't be enumerated for some
+// reason, validation is skipped so the underlying command can surface its
+// own (possibly more specific) error.
+func validateDisplay(display string) error {
+	displays, err := ListDisplays()
+	if err != nil {
+		return nil
+	}
+	return checkDisplayExists(display, displays)
+}
+
+// checkDisplayExists reports an error naming the available displays if
+// display does not match any entry in displays. Split out from
+// validateDisplay so the matching/formatting logic is testable without a
+// real display backend.
+func checkDisplayExists(display string, displays []DisplayInfo) error {
+	for _, d := range displays {
+		if d.Name == display {
+			return nil
+		}
+	}
+	names := make([]string, len(displays))
+	for i, d := range displays {
+		names[i] = d.Name
+	}
+	return fmt.Errorf("display %q not found; available displays: %s", display, strings.Join(names, ", "))
+}
+
+// cmdDisplays prints every connected display and its current resolution.
+func cmdDisplays(jsonOut bool) error {
+	displays, err := ListDisplays()
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		return printJSON(displays)
+	}
+	fmt.Println("Connected displays:")
+	for _, d := range displays {
+		fmt.Printf("  %s: %dx%d @ %dHz\n", d.Name, d.Current.Width, d.Current.Height, d.Current.Freq)
+	}
+	return nil
 }
 
 func fatalf(format string, a ...any) {

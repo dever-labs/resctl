@@ -139,3 +139,39 @@ HDMI-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis
 		t.Fatal("expected error, got nil")
 	}
 }
+
+// --- parseXrandrConnectedOutputs ---
+
+func TestParseXrandrConnectedOutputs(t *testing.T) {
+	const sample = `Screen 0: minimum 8 x 8, current 2560 x 1440, maximum 32767 x 32767
+DP-1 connected 2560x1440+0+0 (normal left inverted right x axis y axis) 597mm x 336mm
+   2560x1440    144.00*+  60.00
+HDMI-1 connected primary 1920x1080+2560+0 (normal left inverted right x axis y axis) 527mm x 296mm
+   1920x1080     60.00*+
+DVI-1 disconnected (normal left inverted right x axis y axis)
+`
+
+	displays, err := parseXrandrConnectedOutputs(sample)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(displays) != 2 {
+		t.Fatalf("len(displays) = %d, want 2 (disconnected output must be excluded): %+v", len(displays), displays)
+	}
+	if displays[0].Name != "DP-1" || displays[0].Current != (Resolution{Width: 2560, Height: 1440, Freq: 144}) {
+		t.Errorf("displays[0] = %+v, want DP-1 @ 2560x1440@144", displays[0])
+	}
+	if displays[1].Name != "HDMI-1" || displays[1].Current != (Resolution{Width: 1920, Height: 1080, Freq: 60}) {
+		t.Errorf("displays[1] = %+v, want HDMI-1 @ 1920x1080@60", displays[1])
+	}
+}
+
+func TestParseXrandrConnectedOutputs_NoConnected(t *testing.T) {
+	const sample = `Screen 0: minimum 8 x 8, current 1920 x 1080, maximum 32767 x 32767
+DP-1 disconnected (normal left inverted right x axis y axis)
+`
+	_, err := parseXrandrConnectedOutputs(sample)
+	if err == nil {
+		t.Error("expected error for no connected display, got nil")
+	}
+}

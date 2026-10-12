@@ -412,3 +412,29 @@ func TestCmdToggle_ListOrClearWithResolutionArgs(t *testing.T) {
 		t.Error("cmdToggle with --clear and resolution args: expected error, got nil")
 	}
 }
+
+// --- checkDisplayExists ---
+
+func TestCheckDisplayExists_Found(t *testing.T) {
+	displays := []DisplayInfo{
+		{Name: "DP-1", Current: Resolution{Width: 2560, Height: 1440, Freq: 144}},
+		{Name: "HDMI-1", Current: Resolution{Width: 1920, Height: 1080, Freq: 60}},
+	}
+	if err := checkDisplayExists("HDMI-1", displays); err != nil {
+		t.Errorf("checkDisplayExists(%q) = %v, want nil", "HDMI-1", err)
+	}
+}
+
+func TestCheckDisplayExists_NotFound(t *testing.T) {
+	displays := []DisplayInfo{
+		{Name: "DP-1"},
+		{Name: "HDMI-1"},
+	}
+	err := checkDisplayExists("DP-2", displays)
+	if err == nil {
+		t.Fatal("checkDisplayExists(\"DP-2\"): expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "DP-1") || !strings.Contains(err.Error(), "HDMI-1") {
+		t.Errorf("error = %q, want it to list available display names", err.Error())
+	}
+}

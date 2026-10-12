@@ -22,6 +22,13 @@ func (r Resolution) String() string {
 	return fmt.Sprintf("%dx%d@%dHz", r.Width, r.Height, r.Freq)
 }
 
+// DisplayInfo identifies a connected display and its current resolution,
+// as returned by ListDisplays.
+type DisplayInfo struct {
+	Name    string     `json:"name"`
+	Current Resolution `json:"current"`
+}
+
 // isWayland reports whether the current session is a Wayland session.
 func isWayland() bool {
 	if os.Getenv("WAYLAND_DISPLAY") != "" {
@@ -150,6 +157,62 @@ func parseXrandrOutput(output, display string) (modes []Resolution, current Reso
 	return modes, current, outputName, nil
 }
 
+// parseXrandrConnectedOutputs parses xrandr --query output into a list of
+// all connected outputs, each with its current resolution (marked '*' in
+// the mode list), for use by ListDisplays.
+func parseXrandrConnectedOutputs(output string) ([]DisplayInfo, error) {
+	lines := strings.Split(output, "\n")
+
+	var displays []DisplayInfo
+	for i, line := range lines {
+		if !strings.Contains(line, " connected") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+
+		var current Resolution
+		for _, modeLine := range lines[i+1:] {
+			if modeLine == "" || (modeLine[0] != ' ' && modeLine[0] != '\t') {
+				break // reached next output section
+			}
+			parts := strings.Fields(strings.TrimSpace(modeLine))
+			if len(parts) < 2 {
+				continue
+			}
+			dims := strings.SplitN(parts[0], "x", 2)
+			if len(dims) != 2 {
+				continue
+			}
+			w, werr := strconv.ParseUint(dims[0], 10, 32)
+			h, herr := strconv.ParseUint(dims[1], 10, 32)
+			if werr != nil || herr != nil {
+				continue
+			}
+			for _, tok := range parts[1:] {
+				if !strings.Contains(tok, "*") {
+					continue
+				}
+				tok = strings.TrimRight(tok, "*+")
+				f, ferr := strconv.ParseFloat(tok, 64)
+				if ferr != nil {
+					continue
+				}
+				current = Resolution{Width: uint32(w), Height: uint32(h), Freq: uint32(f + 0.5)}
+			}
+		}
+
+		displays = append(displays, DisplayInfo{Name: fields[0], Current: current})
+	}
+
+	if len(displays) == 0 {
+		return nil, fmt.Errorf("no connected display found in xrandr output")
+	}
+	return displays, nil
+}
+
 // --- public API ---
 
 // GetCurrent returns the selected display's current resolution.
@@ -192,6 +255,19 @@ func ListModes(display string) ([]Resolution, error) {
 	}
 	modes, _, _, err := parseXrandrOutput(raw, display)
 	return modes, err
+}
+
+// ListDisplays returns all connected displays with their current resolution.
+func ListDisplays() ([]DisplayInfo, error) {
+	if isWayland() {
+		return wlrNativeListDisplays()
+	}
+
+	raw, err := xrandrQuery()
+	if err != nil {
+		return nil, err
+	}
+	return parseXrandrConnectedOutputs(raw)
 }
 
 // SetResolution changes the selected display resolution.
