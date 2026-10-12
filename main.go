@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -29,7 +30,7 @@ Usage:
   resctl toggle --clear [--display <name>]          Delete the saved toggle list
   resctl displays [--json]       List connected displays and their current resolution
   resctl install                 Copy to ~/bin and add to PATH
-  resctl uninstall               Remove from ~/bin
+  resctl uninstall [--force]     Remove from ~/bin (prompts for confirmation)
   resctl version                 Print version
 
 Resolution format:  WxH  or  WxH@Hz  (e.g. 1920x1080  or  2560x1440@144)
@@ -41,7 +42,8 @@ Flags:
                       Windows: device name (e.g. \\.\DISPLAY1)
                       macOS: 1-based index (e.g. 1, 2)
   --force             Apply the change even if already at the target
-                      resolution (set only).
+                      resolution (set only). Skip the confirmation
+                      prompt (uninstall only).
   --list              Show the saved toggle list and current position
                       (toggle only).
   --clear             Delete the saved toggle list (toggle only).
@@ -103,7 +105,7 @@ func main() {
 	case "install":
 		err = install()
 	case "uninstall":
-		err = uninstall()
+		err = uninstall(flags.Force)
 	case "version", "-v", "--version":
 		fmt.Printf("resctl %s\n", version)
 	case "-h", "--help", "help":
@@ -303,6 +305,21 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+// confirm prompts the user with a y/N question on stdout and reads a
+// single line of response from stdin. Only an explicit "y"/"yes" (any
+// case) counts as confirmation; anything else, including EOF (e.g. stdin
+// not a terminal), is treated as "no".
+func confirm(prompt string) bool {
+	fmt.Printf("%s [y/N] ", prompt)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil && line == "" {
+		return false
+	}
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes"
 }
 
 func cmdSet(arg, display string, force bool) error {

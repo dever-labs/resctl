@@ -125,7 +125,8 @@ go build -ldflags="-s -w" -o resctl .
 ### Uninstall
 
 ```
-resctl uninstall
+resctl uninstall           # prompts for confirmation
+resctl uninstall --force   # skip the confirmation prompt
 ```
 
 ---
@@ -140,7 +141,7 @@ resctl toggle [res1 res2 ...]  Cycle between resolutions
 resctl toggle --list           Show the saved toggle list and current position
 resctl toggle --clear          Delete the saved toggle list
 resctl install                 Copy binary to ~/bin and add to PATH
-resctl uninstall               Remove binary from ~/bin
+resctl uninstall [--force]     Remove binary from ~/bin (prompts for confirmation)
 resctl version                 Print the installed version
 ```
 

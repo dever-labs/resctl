@@ -58,9 +58,18 @@ func install() error {
 	return nil
 }
 
-// uninstall removes the binary from ~/bin.
-func uninstall() error {
+// uninstall removes the binary from ~/bin. Unless force is true, it asks
+// for confirmation before removing anything.
+func uninstall(force bool) error {
 	dest := filepath.Join(installDir(), "resctl.exe")
+	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		fmt.Println("resctl is not installed.")
+		return nil
+	}
+	if !force && !confirm(fmt.Sprintf("Remove %s?", dest)) {
+		fmt.Println("Aborted.")
+		return nil
+	}
 	if err := os.Remove(dest); err != nil {
 		if os.IsNotExist(err) {
 			fmt.Println("resctl is not installed.")
