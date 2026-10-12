@@ -10,7 +10,10 @@ import (
 )
 
 // ToggleState persists the user's toggle list and current position.
+// Version identifies the schema so loadState() can migrate older files
+// forward if the shape of this struct ever changes.
 type ToggleState struct {
+	Version      int      `json:"version"`
 	Resolutions  []string `json:"resolutions"`
 	CurrentIndex int      `json:"currentIndex"`
 }
@@ -51,6 +54,11 @@ func loadState(display string) (ToggleState, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return ToggleState{}, err
 	}
+	// Files written before the version field existed have Version == 0;
+	// treat them as v1, since the schema hasn't changed since then.
+	if state.Version == 0 {
+		state.Version = 1
+	}
 	return state, nil
 }
 
@@ -58,6 +66,7 @@ func saveState(state ToggleState, display string) error {
 	if err := os.MkdirAll(configDir(), 0o755); err != nil {
 		return err
 	}
+	state.Version = currentStateVersion
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
