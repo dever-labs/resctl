@@ -75,7 +75,7 @@ func compositorHint() string {
 	case strings.Contains(desktop, "kde") || strings.Contains(desktop, "plasma"):
 		return "KDE Plasma does not support wlr-output-management; use 'kscreen-doctor' or System Settings → Display"
 	default:
-		return "compositor does not support wlr-output-management (requires a wlroots-based compositor such as Sway or Hyprland)"
+		return "compositor does not support wlr-output-management (requires a wlroots-based compositor such as Sway or Hyprland); you may be able to use an xrandr-based tool via XWayland instead"
 	}
 }
 
