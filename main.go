@@ -31,6 +31,7 @@ Usage:
   resctl displays [--json]       List connected displays and their current resolution
   resctl install                 Copy to ~/bin and add to PATH
   resctl uninstall [--force]     Remove from ~/bin (prompts for confirmation)
+  resctl completion <shell>      Print a completion script (bash, zsh, fish)
   resctl version                 Print version
 
 Resolution format:  WxH  or  WxH@Hz  (e.g. 1920x1080  or  2560x1440@144)
@@ -63,6 +64,9 @@ Examples:
   resctl list --json
   resctl displays
   resctl displays --json
+  resctl completion bash > /etc/bash_completion.d/resctl
+  resctl completion zsh > "${fpath[1]}/_resctl"
+  resctl completion fish > ~/.config/fish/completions/resctl.fish
 `
 
 func main() {
@@ -106,6 +110,15 @@ func main() {
 		err = install()
 	case "uninstall":
 		err = uninstall(flags.Force)
+	case "completion":
+		if len(args) == 0 {
+			fatalf("completion requires a shell argument (bash, zsh, or fish)\n\n%s", usage)
+		}
+		var script string
+		script, err = cmdCompletion(strings.ToLower(args[0]))
+		if err == nil {
+			fmt.Print(script)
+		}
 	case "version", "-v", "--version":
 		fmt.Printf("resctl %s\n", version)
 	case "-h", "--help", "help":
