@@ -316,6 +316,53 @@ func TestFilterValidResolutions_AllDropped(t *testing.T) {
 	}
 }
 
+func TestRemapCurrentIndex(t *testing.T) {
+	tests := []struct {
+		name         string
+		original     []string
+		currentIndex int
+		filtered     []string
+		want         int
+	}{
+		{
+			name:         "current entry survives filtering, index shifts down",
+			original:     []string{"1920x1080", "3840x2160", "2560x1440"},
+			currentIndex: 1, // pointing at 3840x2160
+			filtered:     []string{"3840x2160", "2560x1440"},
+			want:         0, // 3840x2160 is now at index 0, not 1
+		},
+		{
+			name:         "nothing dropped, index unchanged",
+			original:     []string{"1920x1080", "2560x1440"},
+			currentIndex: 1,
+			filtered:     []string{"1920x1080", "2560x1440"},
+			want:         1,
+		},
+		{
+			name:         "current entry itself was dropped",
+			original:     []string{"1920x1080", "3840x2160"},
+			currentIndex: 1, // pointing at 3840x2160, which got dropped
+			filtered:     []string{"1920x1080"},
+			want:         0,
+		},
+		{
+			name:         "currentIndex out of range",
+			original:     []string{"1920x1080"},
+			currentIndex: 5,
+			filtered:     []string{"1920x1080"},
+			want:         0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := remapCurrentIndex(tt.original, tt.currentIndex, tt.filtered); got != tt.want {
+				t.Errorf("remapCurrentIndex(%v, %d, %v) = %d, want %d", tt.original, tt.currentIndex, tt.filtered, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGroupModesByResolution(t *testing.T) {
 	modes := []Resolution{
 		{Width: 1920, Height: 1080, Freq: 50},

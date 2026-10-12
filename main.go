@@ -397,6 +397,25 @@ func filterValidResolutions(resolutions []string, modes []Resolution) (valid, dr
 	return valid, dropped
 }
 
+// remapCurrentIndex finds where the entry currently pointed at by
+// currentIndex in the original list ended up in filtered (a subset of
+// original with some entries removed), so the "current position" survives
+// filtering instead of drifting to whatever happens to occupy the same
+// numeric index afterwards. If the current entry itself was dropped, or
+// currentIndex was out of range, it defaults to 0.
+func remapCurrentIndex(original []string, currentIndex int, filtered []string) int {
+	if currentIndex < 0 || currentIndex >= len(original) {
+		return 0
+	}
+	currentEntry := original[currentIndex]
+	for i, r := range filtered {
+		if r == currentEntry {
+			return i
+		}
+	}
+	return 0
+}
+
 func cmdToggle(args []string, display string, list, clear bool) error {
 	if (list || clear) && len(args) > 0 {
 		return fmt.Errorf("--list/--clear cannot be combined with resolution arguments")
@@ -443,9 +462,7 @@ func cmdToggle(args []string, display string, list, clear bool) error {
 			}
 			if len(dropped) > 0 {
 				fmt.Fprintf(os.Stderr, "warning: removing unavailable entries from toggle list: %s\n", strings.Join(dropped, ", "))
-				if state.CurrentIndex >= len(valid) {
-					state.CurrentIndex = 0
-				}
+				state.CurrentIndex = remapCurrentIndex(state.Resolutions, state.CurrentIndex, valid)
 				state.Resolutions = valid
 			}
 		}
