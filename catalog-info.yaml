@@ -1,0 +1,35 @@
+# Describes this repository in devhub (https://hub.dever.dk), dever-labs'
+# developer portal. devhub's GitHub discovery reads this file from the
+# default branch.
+#   devhub/install  how to install it (Install card), <channel>:<id>, comma-separated
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: resctl
+  namespace: devtools
+  title: resctl
+  description: Minimal CLI to get, set and toggle display resolution on Windows, Linux and macOS.
+  annotations:
+    github.com/project-slug: dever-labs/resctl
+spec:
+  owner: group:devtools/engineering
+  domain: domain:devtools/devtools
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: resctl
+  namespace: devtools
+  title: resctl
+  description: >
+    Single-binary display resolution CLI — Win32 API on Windows, xrandr and
+    Wayland on Linux, CoreGraphics on macOS.
+  annotations:
+    github.com/project-slug: dever-labs/resctl
+    devhub/install: scoop:dever-labs/resctl
+  tags: [go, cli]
+spec:
+  type: tool
+  lifecycle: production
+  owner: group:devtools/engineering
+  system: system:devtools/resctl
